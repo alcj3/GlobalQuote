@@ -8,7 +8,7 @@ export interface ExtractedProduct {
   category: string
   origin_country: string | null
   manufacturing_cost_per_unit: number
-  shipping_cost_per_unit: number
+  shipping_cost_per_unit: number | null
   quantity: number | null
   target_retailer: string | null
   additional_costs_per_unit: number | null
@@ -58,7 +58,12 @@ export function buildExtractionPrompt(message: string): string {
 Supplier message: "${message}"
 
 Rules:
-- shipping_cost_per_unit: if a total shipping cost and quantity are given, divide them (e.g. $300 / 1000 units = 0.30)
+- shipping_cost_per_unit: extract the per-unit shipping cost using these patterns:
+  - Per-unit phrasing: "$2 shipping per unit" → 2.00
+  - Per-unit phrasing: "shipping is $2 each" → 2.00
+  - Bulk total divided by quantity: "shipping costs $300 for 1000 units" → 0.30
+  - Bulk total divided by quantity: "I pay $500 to ship 200 units" → 2.50
+  - If shipping cost cannot be determined from the message, set shipping_cost_per_unit to null
 - category: infer from context — must be one of: clothing, food, electronics, home_goods, other
 - If you cannot identify a product name AND at least one cost, set error to:
   "Please describe your product and its costs, e.g. I sell hoodies, cost $6, shipping $2"
@@ -71,7 +76,7 @@ Return ONLY this JSON, no prose, no markdown:
   "category": <string>,
   "origin_country": <string or null>,
   "manufacturing_cost_per_unit": <number>,
-  "shipping_cost_per_unit": <number>,
+  "shipping_cost_per_unit": <number or null — null if shipping cost cannot be determined>,
   "quantity": <number or null>,
   "target_retailer": <string or null>,
   "additional_costs_per_unit": <number or null>,
@@ -104,7 +109,7 @@ export function parseExtractionResponse(raw: string): ExtractedProduct {
     category: inner.category as string,
     origin_country: (inner.origin_country as string | null) ?? null,
     manufacturing_cost_per_unit: inner.manufacturing_cost_per_unit as number,
-    shipping_cost_per_unit: (inner.shipping_cost_per_unit as number) ?? 0,
+    shipping_cost_per_unit: (inner.shipping_cost_per_unit as number | null) ?? null,
     quantity: (inner.quantity as number | null) ?? null,
     target_retailer: (inner.target_retailer as string | null) ?? null,
     additional_costs_per_unit: (inner.additional_costs_per_unit as number | null) ?? null,
@@ -149,12 +154,19 @@ export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: Tariff
   const tariffInstruction = tariff
     ? `1. The duty rate for this product has been pre-fetched from the USITC HTS database:
    HTS ${tariff.hts_code} — total rate ${tariff.total_rate}% (${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge).
-   Use this exact rate. Set tariff_rate_assumed to "${tariff.total_rate}% — HTS ${tariff.hts_code} (USITC)".
+   Use this exact rate. Set tariff_rate_assumed to "${tariff.total_rate}% — HTS ${tariff.hts_code} (${extracted.origin_country ?? 'origin'}: ${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge, USITC)".
    Do NOT estimate or override this value.
    Add to assumptions[]: "Tariff rate sourced from USITC HTS API: ${tariff.hts_code} at ${tariff.total_rate}%"`
     : `1. Estimate the HTS tariff rate for this product category and origin country.
    - Account for Section 301 tariffs (China), Vietnam surcharges, and any other known country-specific duties.
    - State the assumed HTS code and rate explicitly in tariff_rate_assumed and in assumptions[].`
+
+  const shippingDisplay = extracted.shipping_cost_per_unit !== null
+    ? `$${extracted.shipping_cost_per_unit}`
+    : 'unknown'
+  const shippingAssumptionInstruction = extracted.shipping_cost_per_unit === null
+    ? '\n   - Shipping cost was not provided. Estimate a reasonable shipping cost per unit and add a shipping assumption to assumptions[].'
+    : ''
 
   return `You are a U.S. import pricing analyst with expertise in HTS tariff classification.
 
@@ -163,18 +175,25 @@ Extracted product data:
 - Category: ${extracted.category}
 - Origin country: ${extracted.origin_country ?? 'unknown'}
 - Manufacturing cost/unit: $${extracted.manufacturing_cost_per_unit}
-- Shipping cost/unit: $${extracted.shipping_cost_per_unit}
+- Shipping cost/unit: ${shippingDisplay}
 - Additional costs/unit: $${extracted.additional_costs_per_unit ?? 0}
 - Target retailer: ${extracted.target_retailer ?? 'generic U.S. retailer'}
 
 Instructions:
 ${tariffInstruction}
-2. Calculate landed cost = manufacturing + shipping + tariff + additional.
-3. Generate MSRP and wholesale price for the U.S. market.
-4. Calculate supplier_margin = (wholesale_price - landed_cost) / wholesale_price * 100 and retail_margin = (msrp - wholesale_price) / msrp * 100.
+2. Calculate landed cost = manufacturing + shipping + tariff + additional.${shippingAssumptionInstruction}
+3. Derive wholesale_price and msrp from target margins — NEVER set wholesale_price equal to or less than landed_cost:
+   - Choose supplier_margin between 25% and 45%
+   - wholesale_price = landed_cost / (1 - supplier_margin / 100)
+   - Choose retail_margin to meet the retailer's expected range (see step 6)
+   - msrp = wholesale_price / (1 - retail_margin / 100)
+4. Verify using these formulas and confirm both margins are positive before returning JSON:
+   - Supplier Margin = (wholesale_price - landed_cost) / wholesale_price * 100
+   - Retail Margin = (msrp - wholesale_price) / msrp * 100
+   Verify margin consistency: wholesale_price must be strictly between landed_cost and msrp before returning JSON.
 5. Score confidence 0-100. Penalise for unknown origin, high tariff uncertainty, or thin margins.
 6. ${retailerInstruction}
-7. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}.
+7. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}. In buyer_perspective.insights, reference the exact supplier_margin and retail_margin values you calculated in step 4 so insights are grounded in the real numbers.
 8. List every assumption made in the assumptions array (tariff rate, missing costs, inferred values).
 
 Return ONLY this JSON, no prose, no markdown:

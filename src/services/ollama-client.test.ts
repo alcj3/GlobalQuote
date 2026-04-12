@@ -74,6 +74,34 @@ describe('buildExtractionPrompt', () => {
       expect(prompt).toContain(field)
     }
   })
+
+  // Bug 1 — shipping few-shot examples
+  it('includes few-shot example for "$2 shipping per unit"', () => {
+    expect(buildExtractionPrompt(baseMessage)).toContain('$2 shipping per unit')
+  })
+
+  it('includes few-shot example for bulk shipping divided by quantity showing 0.30', () => {
+    const prompt = buildExtractionPrompt(baseMessage)
+    expect(prompt).toContain('$300')
+    expect(prompt).toContain('1000')
+    expect(prompt).toContain('0.30')
+  })
+
+  it('includes few-shot example for "shipping is $2 each"', () => {
+    expect(buildExtractionPrompt(baseMessage)).toContain('shipping is $2 each')
+  })
+
+  it('includes few-shot example for "$500 to ship 200 units" showing 2.50', () => {
+    const prompt = buildExtractionPrompt(baseMessage)
+    expect(prompt).toContain('$500')
+    expect(prompt).toContain('200 units')
+    expect(prompt).toContain('2.50')
+  })
+
+  it('instructs setting shipping_cost_per_unit to null when shipping cannot be determined', () => {
+    const prompt = buildExtractionPrompt(baseMessage)
+    expect(prompt).toMatch(/shipping.*null|null.*shipping/i)
+  })
 })
 
 // ─── parseExtractionResponse ──────────────────────────────────────────────────
@@ -112,6 +140,23 @@ describe('parseExtractionResponse', () => {
     const payload = { ...validExtraction, manufacturing_cost_per_unit: undefined }
     const raw = JSON.stringify({ response: JSON.stringify(payload), done: true })
     expect(() => parseExtractionResponse(raw)).toThrow()
+  })
+
+  // Bug 1 — shipping_cost_per_unit must default to null, not 0
+  it('returns shipping_cost_per_unit: null when field is absent from parsed JSON', () => {
+    const payload = Object.fromEntries(
+      Object.entries(validExtraction).filter(([k]) => k !== 'shipping_cost_per_unit')
+    )
+    const raw = JSON.stringify({ response: JSON.stringify(payload), done: true })
+    const result = parseExtractionResponse(raw)
+    expect(result.shipping_cost_per_unit).toBeNull()
+  })
+
+  it('returns shipping_cost_per_unit: null when field is explicitly null in parsed JSON', () => {
+    const payload = { ...validExtraction, shipping_cost_per_unit: null }
+    const raw = JSON.stringify({ response: JSON.stringify(payload), done: true })
+    const result = parseExtractionResponse(raw)
+    expect(result.shipping_cost_per_unit).toBeNull()
   })
 })
 
@@ -227,6 +272,53 @@ describe('parseAnalysisResponse', () => {
   })
 })
 
+// ─── buildAnalysisPrompt — null shipping (Bug 1) ─────────────────────────────
+
+describe('buildAnalysisPrompt — null shipping', () => {
+  const nullShipping = { ...validExtraction, shipping_cost_per_unit: null }
+
+  it('renders "unknown" (not "$null" or "$0") when shipping_cost_per_unit is null', () => {
+    const prompt = buildAnalysisPrompt(nullShipping)
+    expect(prompt).not.toContain('Shipping cost/unit: $null')
+    expect(prompt).not.toContain('Shipping cost/unit: $0')
+    expect(prompt).toContain('Shipping cost/unit: unknown')
+  })
+
+  it('instructs model to add a shipping assumption when shipping is null', () => {
+    const prompt = buildAnalysisPrompt(nullShipping)
+    expect(prompt).toMatch(/shipping.*assumption|assumption.*shipping/i)
+  })
+})
+
+// ─── buildAnalysisPrompt — margin formulas (Bug 2) ───────────────────────────
+
+describe('buildAnalysisPrompt — margin formulas', () => {
+  it('includes the supplier margin formula', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('(wholesale_price - landed_cost) / wholesale_price')
+  })
+
+  it('includes the retail margin formula', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('(msrp - wholesale_price) / msrp')
+  })
+
+  it('instructs the model to verify margin consistency before returning JSON', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toMatch(/verify.*margin|margin.*consistent/i)
+  })
+})
+
+// ─── buildAnalysisPrompt — buyer insight grounding (Bug 3) ───────────────────
+
+describe('buildAnalysisPrompt — buyer insight grounding', () => {
+  it('instructs the model to reference exact calculated margin values in buyer_perspective.insights', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toMatch(/supplier_margin.*retail_margin|retail_margin.*supplier_margin/i)
+    expect(prompt).toContain('buyer_perspective')
+  })
+})
+
 // ─── buildAnalysisPrompt — retailer margin context ───────────────────────────
 
 describe('buildAnalysisPrompt — retailer margin context', () => {
@@ -246,6 +338,25 @@ describe('buildAnalysisPrompt — retailer margin context', () => {
   it('includes the instruction to penalise confidence when margin is outside the range', () => {
     const prompt = buildAnalysisPrompt(validExtraction)
     expect(prompt).toContain('penalise')
+  })
+})
+
+// ─── buildAnalysisPrompt — wholesale price formulas (Bug 1) ──────────────────
+
+describe('buildAnalysisPrompt — wholesale price formulas', () => {
+  it('includes the formula to derive wholesale_price from landed_cost and supplier_margin', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('landed_cost / (1 - supplier_margin / 100)')
+  })
+
+  it('includes the formula to derive msrp from wholesale_price and retail_margin', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('wholesale_price / (1 - retail_margin / 100)')
+  })
+
+  it('includes an explicit warning against setting wholesale_price equal to or less than landed_cost', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toMatch(/NEVER set wholesale_price equal to or less than landed_cost/i)
   })
 })
 
@@ -271,6 +382,14 @@ describe('buildAnalysisPrompt — tariff variants', () => {
     expect(prompt).toContain('6912.00')
     expect(prompt).toContain('26%')
     expect(prompt).not.toContain('Estimate the HTS tariff rate')
+  })
+
+  it('with tariff includes the origin country in the tariff_rate_assumed string', () => {
+    const prompt = buildAnalysisPrompt(validExtraction, tariff)
+    // validExtraction has origin_country: 'Vietnam'
+    expect(prompt).toContain('Vietnam')
+    expect(prompt).toContain('6% MFN')
+    expect(prompt).toContain('20% surcharge')
   })
 
   it('fetchAnalysis passes tariff through to the prompt when provided', async () => {

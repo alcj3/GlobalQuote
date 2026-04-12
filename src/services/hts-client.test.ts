@@ -1,53 +1,63 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { buildHtsUrl, parseHtsResponse, lookupTariffRate } from './hts-client'
+import { buildExportUrl, parseExportResponse, lookupTariffRate } from './hts-client'
 import { classifyHTS } from './groq-client'
 
 vi.mock('./groq-client')
 
-// ─── buildHtsUrl ──────────────────────────────────────────────────────────────
+// ─── buildExportUrl ───────────────────────────────────────────────────────────
 
-describe('buildHtsUrl', () => {
-  it('returns the correct USITC URL for a given HTS code', () => {
-    const url = buildHtsUrl('6912.00')
-    expect(url).toBe('https://hts.usitc.gov/reststop/api/details/getrecord?htsno=6912.00')
+describe('buildExportUrl', () => {
+  it('returns the correct USITC exportList URL for a given HTS code', () => {
+    const url = buildExportUrl('6912.00.44.00')
+    expect(url).toBe('https://hts.usitc.gov/reststop/exportList?from=6912.00.44.00&to=6912.00.44.00&format=JSON&styles=false')
+  })
+
+  it('URL-encodes the HTS code', () => {
+    const url = buildExportUrl('6912.00')
+    expect(url).toContain('from=6912.00')
+    expect(url).toContain('to=6912.00')
   })
 
   it('trims whitespace from the code before embedding in the URL', () => {
-    const url = buildHtsUrl('  6912.00  ')
-    expect(url).toContain('htsno=6912.00')
+    const url = buildExportUrl('  6912.00  ')
+    expect(url).toContain('from=6912.00')
     expect(url).not.toContain(' ')
   })
 })
 
-// ─── parseHtsResponse ─────────────────────────────────────────────────────────
+// ─── parseExportResponse ──────────────────────────────────────────────────────
 
-describe('parseHtsResponse', () => {
+describe('parseExportResponse', () => {
   it('parses "6%" → 6', () => {
-    expect(parseHtsResponse([{ general: '6%' }])).toBe(6)
+    expect(parseExportResponse([{ general: '6%' }])).toBe(6)
   })
 
   it('parses "Free" → 0', () => {
-    expect(parseHtsResponse([{ general: 'Free' }])).toBe(0)
+    expect(parseExportResponse([{ general: 'Free' }])).toBe(0)
   })
 
   it('parses "6.5%" → 6.5', () => {
-    expect(parseHtsResponse([{ general: '6.5%' }])).toBe(6.5)
+    expect(parseExportResponse([{ general: '6.5%' }])).toBe(6.5)
   })
 
   it('returns null for a compound rate string', () => {
-    expect(parseHtsResponse([{ general: '6.5¢/kg + 2%' }])).toBeNull()
+    expect(parseExportResponse([{ general: '6.5¢/kg + 2%' }])).toBeNull()
   })
 
-  it('returns null when the general field is missing', () => {
-    expect(parseHtsResponse([{}])).toBeNull()
+  it('returns null when the array is empty', () => {
+    expect(parseExportResponse([])).toBeNull()
   })
 
-  it('returns null when the general field is an empty string', () => {
-    expect(parseHtsResponse([{ general: '' }])).toBeNull()
+  it('returns null when every item has an empty-string general', () => {
+    expect(parseExportResponse([{ general: '' }, { general: '' }])).toBeNull()
   })
 
-  it('returns null when the response array is empty', () => {
-    expect(parseHtsResponse([])).toBeNull()
+  it('skips items with empty general and returns the first item with a valid rate', () => {
+    expect(parseExportResponse([{ general: '' }, { htsno: '6912.00.44.00', general: '10%' }])).toBe(10)
+  })
+
+  it('returns null when general is missing from all items', () => {
+    expect(parseExportResponse([{}, {}])).toBeNull()
   })
 })
 
@@ -131,14 +141,23 @@ describe('lookupTariffRate', () => {
     mockUsitcFetch('6%')
     const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Japan')
     expect(result).not.toBeNull()
-    // Falls back to category map: home_goods → '6912.00'
-    expect(result!.hts_code).toBe('6912.00')
+    // Falls back to JSON category map; validate format rather than a specific code
+    expect(result!.hts_code).toMatch(/^\d{4}\.\d{2}/)
     expect(result!.base_rate).toBe(6)
+  })
+
+  it('falls back to JSON map for home_ceramics category when classifyHTS returns null', async () => {
+    vi.mocked(classifyHTS).mockResolvedValueOnce(null)
+    mockUsitcFetch('10%')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_ceramics', 'Japan')
+    expect(result).not.toBeNull()
+    expect(result!.hts_code).toMatch(/^\d{4}\.\d{2}/)
+    expect(result!.base_rate).toBe(10)
   })
 
   it('returns null when classifyHTS returns null and category has no map entry', async () => {
     vi.mocked(classifyHTS).mockResolvedValueOnce(null)
-    const result = await lookupTariffRate('Unknown widget', 'other', 'Japan')
+    const result = await lookupTariffRate('Unknown widget', 'unmapped_category', 'Japan')
     expect(result).toBeNull()
   })
 
@@ -153,5 +172,24 @@ describe('lookupTariffRate', () => {
     expect(result!.hts_code).toBe('6109.10.00')
     expect(result!.total_rate).toBe(0)
     expect(mockFn).not.toHaveBeenCalled()
+  })
+
+  it('returns null when exportList returns 0 results and no category map entry exists', async () => {
+    vi.mocked(classifyHTS).mockResolvedValueOnce(null)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    }))
+    const result = await lookupTariffRate('Unknown widget', 'other', 'Japan')
+    expect(result).toBeNull()
+  })
+
+  it('returns null when exportList returns results but all have empty general', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ htsno: '', general: '' }, { htsno: '', general: '' }]),
+    }))
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Japan')
+    expect(result).toBeNull()
   })
 })

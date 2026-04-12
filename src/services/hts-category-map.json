@@ -1,0 +1,112 @@
+{
+  "clothing": {
+    "hts_code": "6109.10",
+    "general_rate": "16.5%",
+    "description": "T-shirts, singlets and similar garments, of cotton, knitted"
+  },
+  "food": {
+    "hts_code": "2106.90",
+    "general_rate": "6.4%",
+    "description": "Food preparations not elsewhere specified or included"
+  },
+  "electronics": {
+    "hts_code": "8471.30",
+    "general_rate": "Free",
+    "description": "Portable automatic data processing machines, weight not exceeding 10 kg"
+  },
+  "home_goods": {
+    "hts_code": "6912.00",
+    "general_rate": "10%",
+    "description": "Ceramic tableware, kitchenware and other household articles"
+  },
+  "clothing_tops": {
+    "hts_code": "6109.10",
+    "general_rate": "16.5%",
+    "description": "T-shirts, singlets and similar garments, of cotton, knitted"
+  },
+  "clothing_bottoms": {
+    "hts_code": "6203.42",
+    "general_rate": "16.6%",
+    "description": "Trousers, bib and brace overalls, breeches and shorts, of cotton, men's or boys'"
+  },
+  "clothing_outerwear": {
+    "hts_code": "6201.92",
+    "general_rate": "16.4%",
+    "description": "Anoraks, windbreakers and similar articles, of cotton, men's or boys'"
+  },
+  "footwear": {
+    "hts_code": "6403.99",
+    "general_rate": "8.5%",
+    "description": "Footwear with outer soles of rubber or plastics and uppers of leather, other"
+  },
+  "bags_luggage": {
+    "hts_code": "4202.22",
+    "general_rate": "9%",
+    "description": "Handbags, whether or not with shoulder strap, of leather or composition leather"
+  },
+  "food_processed": {
+    "hts_code": "2106.90",
+    "general_rate": "6.4%",
+    "description": "Food preparations not elsewhere specified or included"
+  },
+  "food_beverages": {
+    "hts_code": "2202.99",
+    "general_rate": "Free",
+    "description": "Other non-alcoholic beverages, except fruit or vegetable juices"
+  },
+  "electronics_computers": {
+    "hts_code": "8471.30",
+    "general_rate": "Free",
+    "description": "Portable automatic data processing machines, weight not exceeding 10 kg"
+  },
+  "electronics_phones": {
+    "hts_code": "8517.12",
+    "general_rate": "Free",
+    "description": "Telephones for cellular networks or for other wireless networks"
+  },
+  "electronics_accessories": {
+    "hts_code": "8518.29",
+    "general_rate": "4.9%",
+    "description": "Loudspeakers, multiple, whether or not mounted in their enclosures"
+  },
+  "home_ceramics": {
+    "hts_code": "6912.00",
+    "general_rate": "10%",
+    "description": "Ceramic tableware, kitchenware and other household articles"
+  },
+  "home_furniture": {
+    "hts_code": "9403.60",
+    "general_rate": "Free",
+    "description": "Other wooden furniture"
+  },
+  "home_textiles": {
+    "hts_code": "6302.21",
+    "general_rate": "6.7%",
+    "description": "Bed linen of cotton, printed"
+  },
+  "toys_games": {
+    "hts_code": "9503.00",
+    "general_rate": "Free",
+    "description": "Tricycles, scooters, pedal cars and similar wheeled toys; dolls' carriages"
+  },
+  "sporting_goods": {
+    "hts_code": "9506.91",
+    "general_rate": "4%",
+    "description": "Articles and equipment for general physical exercise, gymnastics or athletics"
+  },
+  "jewelry": {
+    "hts_code": "7113.19",
+    "general_rate": "7%",
+    "description": "Articles of jewelry and parts thereof, of other precious metal, whether or not plated or clad with precious metal"
+  },
+  "cosmetics": {
+    "hts_code": "3304.99",
+    "general_rate": "Free",
+    "description": "Beauty or make-up preparations and preparations for the care of the skin"
+  },
+  "other": {
+    "hts_code": "3926.90",
+    "general_rate": "5.3%",
+    "description": "Other articles of plastics and articles of other materials of headings 3901 to 3914"
+  }
+}

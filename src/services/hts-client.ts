@@ -1,6 +1,7 @@
 import { classifyHTS } from './groq-client'
+import htsCategoryMapData from './hts-category-map.json'
 
-const HTS_API_BASE = 'https://hts.usitc.gov/reststop/api/details/getrecord'
+const HTS_EXPORT_BASE = 'https://hts.usitc.gov/reststop/exportList'
 
 export interface TariffResult {
   hts_code: string
@@ -10,12 +11,10 @@ export interface TariffResult {
   source: 'hts_api'
 }
 
-export const HTS_CATEGORY_MAP: Record<string, string> = {
-  clothing: '6109.10',
-  food: '2106.90',
-  electronics: '8471.30',
-  home_goods: '6912.00',
-}
+type CategoryMapEntry = { hts_code: string; general_rate: string; description: string }
+const HTS_CATEGORY_MAP: Record<string, string> = Object.fromEntries(
+  (Object.entries(htsCategoryMapData) as [string, CategoryMapEntry][]).map(([k, v]) => [k, v.hts_code]),
+)
 
 // Surcharges applied on top of MFN base rate (percentage points)
 // USMCA countries are handled separately — they skip the API and return 0
@@ -26,22 +25,22 @@ export const COUNTRY_SURCHARGES: Record<string, number> = {
   Vietnam: 20,
 }
 
-export function buildHtsUrl(htsCode: string): string {
-  return `${HTS_API_BASE}?htsno=${encodeURIComponent(htsCode.trim())}`
+export function buildExportUrl(htsCode: string): string {
+  const code = encodeURIComponent(htsCode.trim())
+  return `${HTS_EXPORT_BASE}?from=${code}&to=${code}&format=JSON&styles=false`
 }
 
-export function parseHtsResponse(raw: unknown): number | null {
+export function parseExportResponse(raw: unknown): number | null {
   if (!Array.isArray(raw) || raw.length === 0) return null
-  const general = (raw[0] as Record<string, unknown>).general
-  if (!general || typeof general !== 'string' || general.trim() === '') return null
-
-  const text = general.trim()
-  if (text.toLowerCase() === 'free') return 0
-
-  // Only parse simple "X%" or "X.X%" — reject compound rates
-  const match = /^(\d+(?:\.\d+)?)%$/.exec(text)
-  if (!match) return null
-  return parseFloat(match[1])
+  for (const item of raw) {
+    const general = (item as Record<string, unknown>).general
+    if (!general || typeof general !== 'string' || general.trim() === '') continue
+    const text = general.trim()
+    if (text.toLowerCase() === 'free') return 0
+    const match = /^(\d+(?:\.\d+)?)%$/.exec(text)
+    if (match) return parseFloat(match[1])
+  }
+  return null
 }
 
 export async function lookupTariffRate(
@@ -51,7 +50,7 @@ export async function lookupTariffRate(
 ): Promise<TariffResult | null> {
   if (origin_country === null) return null
 
-  // Step 1: classify via Groq, fall back to category map
+  // Step 1: classify via Groq, fall back to JSON category map
   const groqResult = await classifyHTS(product, category)
   const hts_code = groqResult?.hts_code ?? HTS_CATEGORY_MAP[category] ?? null
   if (!hts_code) return null
@@ -61,10 +60,10 @@ export async function lookupTariffRate(
     return { hts_code, base_rate: 0, surcharge: 0, total_rate: 0, source: 'hts_api' }
   }
 
-  // Step 3: fetch base rate from USITC getrecord
+  // Step 3: fetch base rate from USITC exportList
   let response: Response
   try {
-    response = await fetch(buildHtsUrl(hts_code))
+    response = await fetch(buildExportUrl(hts_code))
   } catch {
     return null
   }
@@ -78,7 +77,7 @@ export async function lookupTariffRate(
     return null
   }
 
-  const base_rate = parseHtsResponse(data)
+  const base_rate = parseExportResponse(data)
   if (base_rate === null) return null
 
   // Step 4: apply country surcharge
