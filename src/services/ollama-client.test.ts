@@ -317,6 +317,11 @@ describe('buildAnalysisPrompt — buyer insight grounding', () => {
     expect(prompt).toMatch(/supplier_margin.*retail_margin|retail_margin.*supplier_margin/i)
     expect(prompt).toContain('buyer_perspective')
   })
+
+  it('instructs buyer_perspective.decision to be a non-empty string with an example', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('buyer_perspective.decision must be a non-empty string')
+  })
 })
 
 // ─── buildAnalysisPrompt — retailer margin context ───────────────────────────
@@ -338,6 +343,28 @@ describe('buildAnalysisPrompt — retailer margin context', () => {
   it('includes the instruction to penalise confidence when margin is outside the range', () => {
     const prompt = buildAnalysisPrompt(validExtraction)
     expect(prompt).toContain('penalise')
+  })
+})
+
+// ─── buildAnalysisPrompt — MSRP price floor ──────────────────────────────────
+
+describe('buildAnalysisPrompt — MSRP price floor', () => {
+  it('includes the $7 check threshold and $8 floor for home_goods', () => {
+    const prompt = buildAnalysisPrompt({ ...validExtraction, category: 'home_goods' })
+    expect(prompt).toContain('$7')
+    expect(prompt).toContain('$8')
+  })
+
+  it('includes home_ceramics in the floor instruction for home_ceramics category', () => {
+    const prompt = buildAnalysisPrompt({ ...validExtraction, category: 'home_ceramics' })
+    expect(prompt).toContain('home_ceramics')
+    expect(prompt).toContain('$7')
+    expect(prompt).toContain('$8')
+  })
+
+  it('does not include the price floor instruction for clothing', () => {
+    const prompt = buildAnalysisPrompt({ ...validExtraction, category: 'clothing' })
+    expect(prompt).not.toContain('below $7')
   })
 })
 

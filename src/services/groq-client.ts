@@ -12,7 +12,7 @@ export function buildGroqRequest(product: string, category: string): object {
       {
         role: 'system',
         content:
-          'You are a U.S. HTS tariff classification expert. Given a product name and category, return the most specific applicable 8-digit HTS code.\n\nReturn ONLY this JSON, no prose, no markdown:\n{"hts_code": "<8-digit code>", "description": "<brief product description>"}',
+          'You are a U.S. HTS tariff classification expert. Given a product name and category, return the most specific applicable 8-digit HTS code.\n\nCommon misclassification to avoid: Ceramic mugs, bowls, and tableware are HTS 6912, NOT 6906 (which is ceramic pipes and conduits for construction).\n\nReturn ONLY this JSON, no prose, no markdown:\n{"hts_code": "<8-digit code>", "description": "<brief product description>"}',
       },
       {
         role: 'user',

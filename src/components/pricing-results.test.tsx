@@ -98,4 +98,13 @@ describe('PricingResults', () => {
     render(<PricingResults analysis={null} />)
     expect(screen.getByText(/enter your costs/i)).toBeTruthy()
   })
+
+  it('renders "—" in Buyer Decision row when decision is an empty string', () => {
+    const emptyDecision = {
+      ...baseAnalysis,
+      buyer_perspective: { ...baseAnalysis.buyer_perspective, decision: '' },
+    }
+    render(<PricingResults analysis={emptyDecision} />)
+    expect(screen.getByText('—')).toBeTruthy()
+  })
 })

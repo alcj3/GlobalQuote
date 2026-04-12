@@ -168,6 +168,12 @@ export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: Tariff
     ? '\n   - Shipping cost was not provided. Estimate a reasonable shipping cost per unit and add a shipping assumption to assumptions[].'
     : ''
 
+  const msrpFloorInstruction = (extracted.category === 'home_goods' || extracted.category === 'home_ceramics')
+    ? `\n   Price floor for home_goods / home_ceramics: U.S. retail reality for ceramic mugs and bowls is $8–15.
+   If the formula produces an msrp below $7, scale up wholesale_price so that msrp is at least $8.
+   Use msrp = 8, then back-calculate: wholesale_price = msrp * (1 - retail_margin / 100).`
+    : ''
+
   return `You are a U.S. import pricing analyst with expertise in HTS tariff classification.
 
 Extracted product data:
@@ -186,14 +192,14 @@ ${tariffInstruction}
    - Choose supplier_margin between 25% and 45%
    - wholesale_price = landed_cost / (1 - supplier_margin / 100)
    - Choose retail_margin to meet the retailer's expected range (see step 6)
-   - msrp = wholesale_price / (1 - retail_margin / 100)
+   - msrp = wholesale_price / (1 - retail_margin / 100)${msrpFloorInstruction}
 4. Verify using these formulas and confirm both margins are positive before returning JSON:
    - Supplier Margin = (wholesale_price - landed_cost) / wholesale_price * 100
    - Retail Margin = (msrp - wholesale_price) / msrp * 100
    Verify margin consistency: wholesale_price must be strictly between landed_cost and msrp before returning JSON.
 5. Score confidence 0-100. Penalise for unknown origin, high tariff uncertainty, or thin margins.
 6. ${retailerInstruction}
-7. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}. In buyer_perspective.insights, reference the exact supplier_margin and retail_margin values you calculated in step 4 so insights are grounded in the real numbers.
+7. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}. In buyer_perspective.insights, reference the exact supplier_margin and retail_margin values you calculated in step 4 so insights are grounded in the real numbers. buyer_perspective.decision must be a non-empty string, e.g. 'Proceed with negotiation' or 'Strong buy at current terms'.
 8. List every assumption made in the assumptions array (tariff rate, missing costs, inferred values).
 
 Return ONLY this JSON, no prose, no markdown:

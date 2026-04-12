@@ -43,6 +43,22 @@ describe('buildGroqRequest', () => {
     expect(req.temperature).toBe(0)
     expect(req.response_format.type).toBe('json_object')
   })
+
+  it('system prompt includes 6912 to correctly classify ceramic tableware', () => {
+    const req = buildGroqRequest('Ceramic Mug', 'home_goods') as {
+      messages: Array<{ role: string; content: string }>
+    }
+    const sysMsg = req.messages.find((m) => m.role === 'system')
+    expect(sysMsg?.content).toContain('6912')
+  })
+
+  it('system prompt includes NOT 6906 to prevent misclassification as ceramic pipes', () => {
+    const req = buildGroqRequest('Ceramic Mug', 'home_goods') as {
+      messages: Array<{ role: string; content: string }>
+    }
+    const sysMsg = req.messages.find((m) => m.role === 'system')
+    expect(sysMsg?.content).toContain('NOT 6906')
+  })
 })
 
 // ─── parseGroqResponse ────────────────────────────────────────────────────────

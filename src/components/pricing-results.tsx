@@ -141,7 +141,7 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row">
             <dt>Buyer Decision</dt>
-            <dd>{buyer_perspective.decision}</dd>
+            <dd>{buyer_perspective.decision || '—'}</dd>
           </div>
         </dl>
         <ul className="buyer-insights">
