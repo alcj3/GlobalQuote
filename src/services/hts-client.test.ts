@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildHtsUrl, parseHtsResponse, lookupTariffRate } from './hts-client'
+import { classifyHTS } from './groq-client'
+
+vi.mock('./groq-client')
 
 // ─── buildHtsUrl ──────────────────────────────────────────────────────────────
 
@@ -51,28 +54,30 @@ describe('parseHtsResponse', () => {
 // ─── lookupTariffRate ─────────────────────────────────────────────────────────
 
 describe('lookupTariffRate', () => {
-  beforeEach(() => { vi.unstubAllGlobals() })
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    // Default: Groq returns a valid classification for home_goods
+    vi.mocked(classifyHTS).mockResolvedValue({
+      hts_code: '6912.00',
+      description: 'Ceramic tableware',
+    })
+  })
 
-  function mockFetch(rate: string) {
+  function mockUsitcFetch(rate: string) {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve([{ general: rate }]),
     }))
   }
 
-  it('returns null when category is "other"', async () => {
-    const result = await lookupTariffRate('other', 'Japan')
-    expect(result).toBeNull()
-  })
-
   it('returns null when origin_country is null', async () => {
-    const result = await lookupTariffRate('home_goods', null)
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', null)
     expect(result).toBeNull()
   })
 
   it('returns TariffResult with base_rate, surcharge, total_rate, source for a standard MFN country', async () => {
-    mockFetch('6%')
-    const result = await lookupTariffRate('home_goods', 'Japan')
+    mockUsitcFetch('6%')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Japan')
     expect(result).not.toBeNull()
     expect(result!.hts_code).toBe('6912.00')
     expect(result!.base_rate).toBe(6)
@@ -82,25 +87,25 @@ describe('lookupTariffRate', () => {
   })
 
   it('applies China surcharge (+25%) on top of MFN base rate', async () => {
-    mockFetch('6%')
-    const result = await lookupTariffRate('home_goods', 'China')
+    mockUsitcFetch('6%')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'China')
     expect(result!.base_rate).toBe(6)
     expect(result!.surcharge).toBe(25)
     expect(result!.total_rate).toBe(31)
   })
 
   it('applies Vietnam surcharge (+20%) on top of MFN base rate', async () => {
-    mockFetch('6%')
-    const result = await lookupTariffRate('home_goods', 'Vietnam')
+    mockUsitcFetch('6%')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Vietnam')
     expect(result!.base_rate).toBe(6)
     expect(result!.surcharge).toBe(20)
     expect(result!.total_rate).toBe(26)
   })
 
-  it('returns total_rate: 0 for Mexico (USMCA) without making a fetch call', async () => {
+  it('returns total_rate: 0 for Mexico (USMCA) without calling the USITC fetch', async () => {
     const mockFn = vi.fn()
     vi.stubGlobal('fetch', mockFn)
-    const result = await lookupTariffRate('clothing', 'Mexico')
+    const result = await lookupTariffRate('T-Shirt', 'clothing', 'Mexico')
     expect(result).not.toBeNull()
     expect(result!.total_rate).toBe(0)
     expect(result!.base_rate).toBe(0)
@@ -109,15 +114,44 @@ describe('lookupTariffRate', () => {
     expect(mockFn).not.toHaveBeenCalled()
   })
 
-  it('returns null on network failure without rethrowing', async () => {
+  it('returns null on USITC network failure without rethrowing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
-    const result = await lookupTariffRate('home_goods', 'Vietnam')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Vietnam')
     expect(result).toBeNull()
   })
 
-  it('returns null on non-200 response without throwing', async () => {
+  it('returns null on USITC non-200 response without throwing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
-    const result = await lookupTariffRate('home_goods', 'Vietnam')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Vietnam')
     expect(result).toBeNull()
+  })
+
+  it('falls back to HTS_CATEGORY_MAP when classifyHTS returns null', async () => {
+    vi.mocked(classifyHTS).mockResolvedValueOnce(null)
+    mockUsitcFetch('6%')
+    const result = await lookupTariffRate('Ceramic Mug', 'home_goods', 'Japan')
+    expect(result).not.toBeNull()
+    // Falls back to category map: home_goods → '6912.00'
+    expect(result!.hts_code).toBe('6912.00')
+    expect(result!.base_rate).toBe(6)
+  })
+
+  it('returns null when classifyHTS returns null and category has no map entry', async () => {
+    vi.mocked(classifyHTS).mockResolvedValueOnce(null)
+    const result = await lookupTariffRate('Unknown widget', 'other', 'Japan')
+    expect(result).toBeNull()
+  })
+
+  it('returns USMCA result with real hts_code from Groq and total_rate: 0', async () => {
+    vi.mocked(classifyHTS).mockResolvedValueOnce({
+      hts_code: '6109.10.00',
+      description: 'Cotton T-shirts',
+    })
+    const mockFn = vi.fn()
+    vi.stubGlobal('fetch', mockFn)
+    const result = await lookupTariffRate('T-Shirt', 'clothing', 'Canada')
+    expect(result!.hts_code).toBe('6109.10.00')
+    expect(result!.total_rate).toBe(0)
+    expect(mockFn).not.toHaveBeenCalled()
   })
 })

@@ -1,3 +1,5 @@
+import { classifyHTS } from './groq-client'
+
 const HTS_API_BASE = 'https://hts.usitc.gov/reststop/api/details/getrecord'
 
 export interface TariffResult {
@@ -43,19 +45,23 @@ export function parseHtsResponse(raw: unknown): number | null {
 }
 
 export async function lookupTariffRate(
+  product: string,
   category: string,
   origin_country: string | null,
 ): Promise<TariffResult | null> {
   if (origin_country === null) return null
 
-  const hts_code = HTS_CATEGORY_MAP[category]
+  // Step 1: classify via Groq, fall back to category map
+  const groqResult = await classifyHTS(product, category)
+  const hts_code = groqResult?.hts_code ?? HTS_CATEGORY_MAP[category] ?? null
   if (!hts_code) return null
 
-  // USMCA: skip API, return zero rate
+  // Step 2: USMCA fast-path — real code from Groq, zero rate
   if (USMCA_COUNTRIES.has(origin_country)) {
     return { hts_code, base_rate: 0, surcharge: 0, total_rate: 0, source: 'hts_api' }
   }
 
+  // Step 3: fetch base rate from USITC getrecord
   let response: Response
   try {
     response = await fetch(buildHtsUrl(hts_code))
@@ -75,6 +81,7 @@ export async function lookupTariffRate(
   const base_rate = parseHtsResponse(data)
   if (base_rate === null) return null
 
+  // Step 4: apply country surcharge
   const surcharge = COUNTRY_SURCHARGES[origin_country] ?? 0
   return {
     hts_code,

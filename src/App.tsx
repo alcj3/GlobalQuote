@@ -7,14 +7,14 @@ import { lookupTariffRate } from './services/hts-client'
 import './App.css'
 
 const LOADING_MESSAGES: Record<string, string> = {
-  extracting: 'Extracting product details...',
-  'fetching-tariff': 'Fetching tariff rates...',
-  analyzing: 'Running pricing analysis...',
+  extracting:  'Extracting product details...',
+  classifying: 'Classifying product...',
+  analyzing:   'Running pricing analysis...',
 }
 
 function App() {
   const [analysis, setAnalysis] = useState<AIPricingAnalysis | null>(null)
-  const [loadingPhase, setLoadingPhase] = useState<'extracting' | 'fetching-tariff' | 'analyzing' | null>(null)
+  const [loadingPhase, setLoadingPhase] = useState<'extracting' | 'classifying' | 'analyzing' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(message: string) {
@@ -23,8 +23,8 @@ function App() {
     setAnalysis(null)
     try {
       const extracted = await extractProductData(message)
-      setLoadingPhase('fetching-tariff')
-      const tariff = await lookupTariffRate(extracted.category, extracted.origin_country)
+      setLoadingPhase('classifying')
+      const tariff = await lookupTariffRate(extracted.product, extracted.category, extracted.origin_country)
       setLoadingPhase('analyzing')
       const analysisPayload = await fetchAnalysis(extracted, tariff ?? undefined)
       setAnalysis({
