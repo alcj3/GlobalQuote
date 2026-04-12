@@ -37,9 +37,9 @@ export function buildPrompt(message: string): string {
 
 Your job:
 1. Extract the product name, category, and any costs (manufacturing, shipping, additional) from their message.
-2. If you cannot identify a clear product name AND at least one cost, return ONLY this JSON and nothing else:
+2. If the message is completely empty, pure gibberish, or contains no recognizable product or price information whatsoever, return ONLY this JSON and nothing else:
    {"error": "Please describe your product and its costs, e.g. I sell hoodies, cost $6, shipping $2"}
-3. Otherwise, generate a full pricing analysis.
+3. Otherwise — even if some details are vague or costs are missing — make reasonable assumptions and generate the full pricing analysis.
 
 Supplier message: "${message}"
 
