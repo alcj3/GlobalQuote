@@ -1,5 +1,3 @@
-import type { CostInputs } from '../types'
-
 export interface AIPricingAnalysis {
   productName: string
   category: string
@@ -16,7 +14,9 @@ export interface AIPricingAnalysis {
   buyer_action: string
 }
 
-const REQUIRED_FIELDS: (keyof Omit<AIPricingAnalysis, 'productName' | 'category'>)[] = [
+const REQUIRED_FIELDS: (keyof AIPricingAnalysis)[] = [
+  'productName',
+  'category',
   'landed_cost',
   'msrp',
   'wholesale_price',
@@ -32,19 +32,25 @@ const REQUIRED_FIELDS: (keyof Omit<AIPricingAnalysis, 'productName' | 'category'
 
 const OLLAMA_URL = 'http://localhost:11434/api/generate'
 
-export function buildPrompt(inputs: CostInputs): string {
-  return `You are a U.S. market pricing analyst. A supplier is asking for help pricing a product.
+export function buildPrompt(message: string): string {
+  return `You are a U.S. market pricing analyst. A supplier has described their product in natural language.
 
-Inputs:
-- Product Name: ${inputs.productName}
-- Category: ${inputs.category}
-- Manufacturing Cost: $${inputs.manufacturingCost}
-- Shipping Cost: $${inputs.shippingCost}
-- Additional Costs: $${inputs.additionalCosts} (0 means none provided — make a reasonable assumption)
+Your job:
+1. Extract the product name, category, and any costs (manufacturing, shipping, additional) from their message.
+2. If you cannot identify a clear product name AND at least one cost, return ONLY this JSON and nothing else:
+   {"error": "Please describe your product and its costs, e.g. I sell hoodies, cost $6, shipping $2"}
+3. Otherwise, generate a full pricing analysis.
+
+Supplier message: "${message}"
+
+Category must be one of: clothing, food, electronics, home_goods, other — infer from context.
+If a cost is not mentioned, assume $0 and note it in your analysis.
 
 Return ONLY a JSON object with these exact fields (no explanation, no markdown):
 {
-  "landed_cost": <number — sum of all costs>,
+  "productName": <string — product name you extracted>,
+  "category": <string — one of: clothing, food, electronics, home_goods, other>,
+  "landed_cost": <number — sum of all costs you extracted>,
   "msrp": <number — suggested retail price for U.S. market>,
   "wholesale_price": <number — typically ~50% of msrp>,
   "supplier_margin": <number — percentage profit for the supplier>,
@@ -58,13 +64,17 @@ Return ONLY a JSON object with these exact fields (no explanation, no markdown):
 }`
 }
 
-export function parseOllamaResponse(raw: string, inputs: CostInputs): AIPricingAnalysis {
+export function parseOllamaResponse(raw: string): AIPricingAnalysis {
   const outer = JSON.parse(raw) as { response: string }
   let inner: Record<string, unknown>
   try {
     inner = JSON.parse(outer.response) as Record<string, unknown>
   } catch {
     throw new Error('Invalid response: Ollama did not return valid JSON in the response field')
+  }
+
+  if (typeof inner.error === 'string') {
+    throw new Error(inner.error)
   }
 
   for (const field of REQUIRED_FIELDS) {
@@ -74,8 +84,8 @@ export function parseOllamaResponse(raw: string, inputs: CostInputs): AIPricingA
   }
 
   return {
-    productName: inputs.productName,
-    category: inputs.category,
+    productName: inner.productName as string,
+    category: inner.category as string,
     landed_cost: inner.landed_cost as number,
     msrp: inner.msrp as number,
     wholesale_price: inner.wholesale_price as number,
@@ -90,7 +100,7 @@ export function parseOllamaResponse(raw: string, inputs: CostInputs): AIPricingA
   }
 }
 
-export async function fetchPricingAnalysis(inputs: CostInputs): Promise<AIPricingAnalysis> {
+export async function fetchPricingAnalysis(message: string): Promise<AIPricingAnalysis> {
   let response: Response
   try {
     response = await fetch(OLLAMA_URL, {
@@ -98,7 +108,7 @@ export async function fetchPricingAnalysis(inputs: CostInputs): Promise<AIPricin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama3.2',
-        prompt: buildPrompt(inputs),
+        prompt: buildPrompt(message),
         stream: false,
         format: 'json',
       }),
@@ -112,5 +122,5 @@ export async function fetchPricingAnalysis(inputs: CostInputs): Promise<AIPricin
   }
 
   const raw = await response.text()
-  return parseOllamaResponse(raw, inputs)
+  return parseOllamaResponse(raw)
 }

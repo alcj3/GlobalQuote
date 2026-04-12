@@ -3,7 +3,6 @@ import { PriceInputForm } from './components/price-input-form'
 import { PricingResults } from './components/pricing-results'
 import { fetchPricingAnalysis } from './services/ollama-client'
 import type { AIPricingAnalysis } from './services/ollama-client'
-import type { CostInputs } from './types'
 import './App.css'
 
 function App() {
@@ -11,12 +10,12 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleSubmit(inputs: CostInputs) {
+  async function handleSubmit(message: string) {
     setLoading(true)
     setError(null)
     setAnalysis(null)
     try {
-      const result = await fetchPricingAnalysis(inputs)
+      const result = await fetchPricingAnalysis(message)
       setAnalysis(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')

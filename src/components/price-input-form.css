@@ -19,8 +19,7 @@
   margin-bottom: 6px;
 }
 
-.form-input,
-.form-select {
+.form-textarea {
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--color-border);
@@ -29,11 +28,13 @@
   color: var(--color-text-primary);
   background: #fff;
   box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.form-input:focus,
-.form-select:focus {
+.form-textarea:focus {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
@@ -44,27 +45,6 @@
   margin-top: 5px;
   font-size: 0.8125rem;
   color: #dc2626;
-}
-
-.form-cost-group {
-  background: var(--color-section-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
-}
-
-.form-cost-group-title {
-  margin: 0 0 14px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-secondary);
-}
-
-.form-cost-group .form-field:last-child {
-  margin-bottom: 0;
 }
 
 .form-submit {
