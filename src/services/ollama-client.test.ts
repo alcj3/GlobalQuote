@@ -227,6 +227,28 @@ describe('parseAnalysisResponse', () => {
   })
 })
 
+// ─── buildAnalysisPrompt — retailer margin context ───────────────────────────
+
+describe('buildAnalysisPrompt — retailer margin context', () => {
+  it('includes the Walmart margin range when target_retailer is "Walmart"', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('25')
+    expect(prompt).toContain('30')
+    expect(prompt).toContain('Walmart')
+  })
+
+  it('includes the generic default margin range when target_retailer is null', () => {
+    const prompt = buildAnalysisPrompt({ ...validExtraction, target_retailer: null })
+    expect(prompt).toContain('35')
+    expect(prompt).toContain('45')
+  })
+
+  it('includes the instruction to penalise confidence when margin is outside the range', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('penalise')
+  })
+})
+
 // ─── buildAnalysisPrompt — tariff variants ────────────────────────────────────
 
 describe('buildAnalysisPrompt — tariff variants', () => {

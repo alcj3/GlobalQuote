@@ -1,4 +1,5 @@
 import type { TariffResult } from './hts-client'
+import { getRetailerMargins } from './retailer-config'
 
 const OLLAMA_URL = 'http://localhost:11434/api/generate'
 
@@ -138,6 +139,13 @@ export async function extractProductData(message: string): Promise<ExtractedProd
 // ─── Call 2: Analysis ─────────────────────────────────────────────────────────
 
 export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: TariffResult): string {
+  const margins = getRetailerMargins(extracted.target_retailer)
+  const retailerInstruction = `Retailer margin context:
+- ${margins.name} expects a retail margin of ${margins.min_margin}–${margins.max_margin}%.
+- Evaluate whether the suggested retail_margin falls within, above, or below this range.
+- In buyer_perspective.insights, include one insight explicitly stating whether the margin is on-target, too thin, or too wide for ${margins.name}.
+- If retail_margin is more than 5 percentage points outside this range, penalise the confidence score.`
+
   const tariffInstruction = tariff
     ? `1. The duty rate for this product has been pre-fetched from the USITC HTS database:
    HTS ${tariff.hts_code} — total rate ${tariff.total_rate}% (${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge).
@@ -165,8 +173,9 @@ ${tariffInstruction}
 3. Generate MSRP and wholesale price for the U.S. market.
 4. Calculate supplier_margin = (wholesale_price - landed_cost) / wholesale_price * 100 and retail_margin = (msrp - wholesale_price) / msrp * 100.
 5. Score confidence 0-100. Penalise for unknown origin, high tariff uncertainty, or thin margins.
-6. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}.
-7. List every assumption made in the assumptions array (tariff rate, missing costs, inferred values).
+6. ${retailerInstruction}
+7. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}.
+8. List every assumption made in the assumptions array (tariff rate, missing costs, inferred values).
 
 Return ONLY this JSON, no prose, no markdown:
 {
