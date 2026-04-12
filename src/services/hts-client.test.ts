@@ -1,0 +1,123 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { buildHtsUrl, parseHtsResponse, lookupTariffRate } from './hts-client'
+
+// ─── buildHtsUrl ──────────────────────────────────────────────────────────────
+
+describe('buildHtsUrl', () => {
+  it('returns the correct USITC URL for a given HTS code', () => {
+    const url = buildHtsUrl('6912.00')
+    expect(url).toBe('https://hts.usitc.gov/reststop/api/details/getrecord?htsno=6912.00')
+  })
+
+  it('trims whitespace from the code before embedding in the URL', () => {
+    const url = buildHtsUrl('  6912.00  ')
+    expect(url).toContain('htsno=6912.00')
+    expect(url).not.toContain(' ')
+  })
+})
+
+// ─── parseHtsResponse ─────────────────────────────────────────────────────────
+
+describe('parseHtsResponse', () => {
+  it('parses "6%" → 6', () => {
+    expect(parseHtsResponse([{ general: '6%' }])).toBe(6)
+  })
+
+  it('parses "Free" → 0', () => {
+    expect(parseHtsResponse([{ general: 'Free' }])).toBe(0)
+  })
+
+  it('parses "6.5%" → 6.5', () => {
+    expect(parseHtsResponse([{ general: '6.5%' }])).toBe(6.5)
+  })
+
+  it('returns null for a compound rate string', () => {
+    expect(parseHtsResponse([{ general: '6.5¢/kg + 2%' }])).toBeNull()
+  })
+
+  it('returns null when the general field is missing', () => {
+    expect(parseHtsResponse([{}])).toBeNull()
+  })
+
+  it('returns null when the general field is an empty string', () => {
+    expect(parseHtsResponse([{ general: '' }])).toBeNull()
+  })
+
+  it('returns null when the response array is empty', () => {
+    expect(parseHtsResponse([])).toBeNull()
+  })
+})
+
+// ─── lookupTariffRate ─────────────────────────────────────────────────────────
+
+describe('lookupTariffRate', () => {
+  beforeEach(() => { vi.unstubAllGlobals() })
+
+  function mockFetch(rate: string) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ general: rate }]),
+    }))
+  }
+
+  it('returns null when category is "other"', async () => {
+    const result = await lookupTariffRate('other', 'Japan')
+    expect(result).toBeNull()
+  })
+
+  it('returns null when origin_country is null', async () => {
+    const result = await lookupTariffRate('home_goods', null)
+    expect(result).toBeNull()
+  })
+
+  it('returns TariffResult with base_rate, surcharge, total_rate, source for a standard MFN country', async () => {
+    mockFetch('6%')
+    const result = await lookupTariffRate('home_goods', 'Japan')
+    expect(result).not.toBeNull()
+    expect(result!.hts_code).toBe('6912.00')
+    expect(result!.base_rate).toBe(6)
+    expect(result!.surcharge).toBe(0)
+    expect(result!.total_rate).toBe(6)
+    expect(result!.source).toBe('hts_api')
+  })
+
+  it('applies China surcharge (+25%) on top of MFN base rate', async () => {
+    mockFetch('6%')
+    const result = await lookupTariffRate('home_goods', 'China')
+    expect(result!.base_rate).toBe(6)
+    expect(result!.surcharge).toBe(25)
+    expect(result!.total_rate).toBe(31)
+  })
+
+  it('applies Vietnam surcharge (+20%) on top of MFN base rate', async () => {
+    mockFetch('6%')
+    const result = await lookupTariffRate('home_goods', 'Vietnam')
+    expect(result!.base_rate).toBe(6)
+    expect(result!.surcharge).toBe(20)
+    expect(result!.total_rate).toBe(26)
+  })
+
+  it('returns total_rate: 0 for Mexico (USMCA) without making a fetch call', async () => {
+    const mockFn = vi.fn()
+    vi.stubGlobal('fetch', mockFn)
+    const result = await lookupTariffRate('clothing', 'Mexico')
+    expect(result).not.toBeNull()
+    expect(result!.total_rate).toBe(0)
+    expect(result!.base_rate).toBe(0)
+    expect(result!.surcharge).toBe(0)
+    expect(result!.source).toBe('hts_api')
+    expect(mockFn).not.toHaveBeenCalled()
+  })
+
+  it('returns null on network failure without rethrowing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const result = await lookupTariffRate('home_goods', 'Vietnam')
+    expect(result).toBeNull()
+  })
+
+  it('returns null on non-200 response without throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
+    const result = await lookupTariffRate('home_goods', 'Vietnam')
+    expect(result).toBeNull()
+  })
+})

@@ -1,3 +1,5 @@
+import type { TariffResult } from './hts-client'
+
 const OLLAMA_URL = 'http://localhost:11434/api/generate'
 
 export interface ExtractedProduct {
@@ -135,7 +137,17 @@ export async function extractProductData(message: string): Promise<ExtractedProd
 
 // ─── Call 2: Analysis ─────────────────────────────────────────────────────────
 
-export function buildAnalysisPrompt(extracted: ExtractedProduct): string {
+export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: TariffResult): string {
+  const tariffInstruction = tariff
+    ? `1. The duty rate for this product has been pre-fetched from the USITC HTS database:
+   HTS ${tariff.hts_code} — total rate ${tariff.total_rate}% (${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge).
+   Use this exact rate. Set tariff_rate_assumed to "${tariff.total_rate}% — HTS ${tariff.hts_code} (USITC)".
+   Do NOT estimate or override this value.
+   Add to assumptions[]: "Tariff rate sourced from USITC HTS API: ${tariff.hts_code} at ${tariff.total_rate}%"`
+    : `1. Estimate the HTS tariff rate for this product category and origin country.
+   - Account for Section 301 tariffs (China), Vietnam surcharges, and any other known country-specific duties.
+   - State the assumed HTS code and rate explicitly in tariff_rate_assumed and in assumptions[].`
+
   return `You are a U.S. import pricing analyst with expertise in HTS tariff classification.
 
 Extracted product data:
@@ -148,9 +160,7 @@ Extracted product data:
 - Target retailer: ${extracted.target_retailer ?? 'generic U.S. retailer'}
 
 Instructions:
-1. Estimate the HTS tariff rate for this product category and origin country.
-   - Account for Section 301 tariffs (China), Vietnam surcharges, and any other known country-specific duties.
-   - State the assumed HTS code and rate explicitly in tariff_rate_assumed and in assumptions[].
+${tariffInstruction}
 2. Calculate landed cost = manufacturing + shipping + tariff + additional.
 3. Generate MSRP and wholesale price for the U.S. market.
 4. Calculate supplier_margin = (wholesale_price - landed_cost) / wholesale_price * 100 and retail_margin = (msrp - wholesale_price) / msrp * 100.
@@ -237,7 +247,7 @@ export function parseAnalysisResponse(raw: string): AnalysisPayload {
   }
 }
 
-export async function fetchAnalysis(extracted: ExtractedProduct): Promise<AnalysisPayload> {
+export async function fetchAnalysis(extracted: ExtractedProduct, tariff?: TariffResult): Promise<AnalysisPayload> {
   let response: Response
   try {
     response = await fetch(OLLAMA_URL, {
@@ -245,7 +255,7 @@ export async function fetchAnalysis(extracted: ExtractedProduct): Promise<Analys
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama3.2',
-        prompt: buildAnalysisPrompt(extracted),
+        prompt: buildAnalysisPrompt(extracted, tariff),
         stream: false,
         format: 'json',
       }),

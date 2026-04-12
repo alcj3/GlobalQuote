@@ -3,16 +3,18 @@ import { PriceInputForm } from './components/price-input-form'
 import { PricingResults } from './components/pricing-results'
 import { extractProductData, fetchAnalysis } from './services/ollama-client'
 import type { AIPricingAnalysis } from './services/ollama-client'
+import { lookupTariffRate } from './services/hts-client'
 import './App.css'
 
 const LOADING_MESSAGES: Record<string, string> = {
   extracting: 'Extracting product details...',
+  'fetching-tariff': 'Fetching tariff rates...',
   analyzing: 'Running pricing analysis...',
 }
 
 function App() {
   const [analysis, setAnalysis] = useState<AIPricingAnalysis | null>(null)
-  const [loadingPhase, setLoadingPhase] = useState<'extracting' | 'analyzing' | null>(null)
+  const [loadingPhase, setLoadingPhase] = useState<'extracting' | 'fetching-tariff' | 'analyzing' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(message: string) {
@@ -21,8 +23,10 @@ function App() {
     setAnalysis(null)
     try {
       const extracted = await extractProductData(message)
+      setLoadingPhase('fetching-tariff')
+      const tariff = await lookupTariffRate(extracted.category, extracted.origin_country)
       setLoadingPhase('analyzing')
-      const analysisPayload = await fetchAnalysis(extracted)
+      const analysisPayload = await fetchAnalysis(extracted, tariff ?? undefined)
       setAnalysis({
         product: extracted.product,
         category: extracted.category,

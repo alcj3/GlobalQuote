@@ -6,8 +6,10 @@ import {
   buildAnalysisPrompt,
   parseAnalysisResponse,
   fetchPricingAnalysis,
+  fetchAnalysis,
 } from './ollama-client'
 import type { ExtractedProduct } from './ollama-client'
+import type { TariffResult } from './hts-client'
 
 const baseMessage = 'I sell ceramic mugs made in Vietnam, manufacturing cost $3, shipping $0.50 per unit, selling to Walmart'
 
@@ -222,6 +224,47 @@ describe('parseAnalysisResponse', () => {
     }
     const raw = JSON.stringify({ response: JSON.stringify(broken), done: true })
     expect(() => parseAnalysisResponse(raw)).toThrow()
+  })
+})
+
+// ─── buildAnalysisPrompt — tariff variants ────────────────────────────────────
+
+describe('buildAnalysisPrompt — tariff variants', () => {
+  const tariff: TariffResult = {
+    hts_code: '6912.00',
+    base_rate: 6,
+    surcharge: 20,
+    total_rate: 26,
+    source: 'hts_api',
+  }
+
+  it('without tariff still includes "Estimate the HTS tariff rate" instruction', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('Estimate the HTS tariff rate')
+  })
+
+  it('with tariff includes "pre-fetched" and the exact rate/code, not the estimate instruction', () => {
+    const prompt = buildAnalysisPrompt(validExtraction, tariff)
+    expect(prompt).toContain('pre-fetched')
+    expect(prompt).toContain('6912.00')
+    expect(prompt).toContain('26%')
+    expect(prompt).not.toContain('Estimate the HTS tariff rate')
+  })
+
+  it('fetchAnalysis passes tariff through to the prompt when provided', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, options: RequestInit) => {
+      capturedBody = options.body as string
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: () => Promise.resolve(JSON.stringify({ response: JSON.stringify(validAnalysisPayload), done: true })),
+      })
+    }))
+    await fetchAnalysis(validExtraction, tariff)
+    const body = JSON.parse(capturedBody) as { prompt: string }
+    expect(body.prompt).toContain('pre-fetched')
+    expect(body.prompt).toContain('6912.00')
+    vi.unstubAllGlobals()
   })
 })
 
