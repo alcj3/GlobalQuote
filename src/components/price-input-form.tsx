@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import type { Category, CostInputs } from '../services/pricing-engine'
+import type { Category, CostInputs } from '../types'
 import './price-input-form.css'
 
 interface Props {
   onSubmit: (inputs: CostInputs) => void
+  disabled?: boolean
 }
 
 interface Errors {
@@ -12,7 +13,7 @@ interface Errors {
   manufacturingCost?: string
 }
 
-export function PriceInputForm({ onSubmit }: Props) {
+export function PriceInputForm({ onSubmit, disabled = false }: Props) {
   const [productName, setProductName] = useState('')
   const [category, setCategory] = useState<Category>('clothing')
   const [manufacturingCost, setManufacturingCost] = useState('')
@@ -134,8 +135,8 @@ export function PriceInputForm({ onSubmit }: Props) {
         </div>
       </div>
 
-      <button className="form-submit" type="submit">
-        Calculate Pricing
+      <button className="form-submit" type="submit" disabled={disabled}>
+        {disabled ? 'Analyzing...' : 'Calculate Pricing'}
       </button>
     </form>
   )

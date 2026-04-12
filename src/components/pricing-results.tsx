@@ -1,4 +1,4 @@
-import type { PricingAnalysis } from '../services/pricing-engine'
+import type { AIPricingAnalysis } from '../services/ollama-client'
 import './pricing-results.css'
 
 function formatPrice(price: number): string {
@@ -11,7 +11,7 @@ function formatMargin(margin: number): string {
 }
 
 interface Props {
-  analysis: PricingAnalysis | null
+  analysis: AIPricingAnalysis | null
 }
 
 export function PricingResults({ analysis }: Props) {
@@ -22,14 +22,17 @@ export function PricingResults({ analysis }: Props) {
   const {
     productName,
     category,
-    totalCost,
-    retailPriceMin,
-    retailPriceMax,
+    landed_cost,
     msrp,
-    wholesalePrice,
-    retailMargin,
-    supplierMargin,
-    assumptions,
+    wholesale_price,
+    supplier_margin,
+    retail_margin,
+    confidence_score,
+    confidence_label,
+    confidence_explanation,
+    buyer_decision,
+    buyer_insights,
+    buyer_action,
   } = analysis
 
   return (
@@ -54,8 +57,8 @@ export function PricingResults({ analysis }: Props) {
         <h3 className="results-section-title">Cost Breakdown</h3>
         <dl className="results-dl">
           <div className="results-row">
-            <dt>Total Cost</dt>
-            <dd>{formatPrice(totalCost)}</dd>
+            <dt>Landed Cost</dt>
+            <dd>{formatPrice(landed_cost)}</dd>
           </div>
         </dl>
       </div>
@@ -63,19 +66,13 @@ export function PricingResults({ analysis }: Props) {
       <div className="results-section">
         <h3 className="results-section-title">Suggested Pricing</h3>
         <dl className="results-dl">
-          <div className="results-row">
-            <dt>Estimated Retail Price Range</dt>
-            <dd data-testid="retail-range">
-              {formatPrice(retailPriceMin)} – {formatPrice(retailPriceMax)}
-            </dd>
-          </div>
           <div className="results-row results-row-msrp">
             <dt>Suggested Retail Price (MSRP)</dt>
             <dd>{formatPrice(msrp)}</dd>
           </div>
           <div className="results-row">
             <dt>Suggested Wholesale Price</dt>
-            <dd>{formatPrice(wholesalePrice)}</dd>
+            <dd>{formatPrice(wholesale_price)}</dd>
           </div>
         </dl>
       </div>
@@ -85,25 +82,39 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row">
             <dt>Estimated Retail Margin</dt>
-            <dd>{formatMargin(retailMargin)}</dd>
+            <dd>{formatMargin(retail_margin)}</dd>
           </div>
           <div className="results-row">
             <dt>Supplier Margin</dt>
-            <dd>{formatMargin(supplierMargin)}</dd>
+            <dd>{formatMargin(supplier_margin)}</dd>
           </div>
         </dl>
       </div>
 
-      {assumptions.length > 0 && (
-        <div className="results-assumptions">
-          <h3 className="results-assumptions-title">Assumptions</h3>
-          <ul>
-            {assumptions.map((a, i) => (
-              <li key={i}>{a}</li>
-            ))}
-          </ul>
+      <div className="results-section">
+        <h3 className="results-section-title">AI Confidence</h3>
+        <div className={`confidence-badge confidence-badge--${confidence_label.toLowerCase()}`}>
+          <span className="confidence-score">{confidence_score}</span>
+          <span className="confidence-label">{confidence_label}</span>
         </div>
-      )}
+        <p className="confidence-explanation">{confidence_explanation}</p>
+      </div>
+
+      <div className="results-section">
+        <h3 className="results-section-title">Buyer Intelligence</h3>
+        <dl className="results-dl">
+          <div className="results-row">
+            <dt>Buyer Decision</dt>
+            <dd>{buyer_decision}</dd>
+          </div>
+        </dl>
+        <ul className="buyer-insights">
+          {buyer_insights.map((insight, i) => (
+            <li key={i}>{insight}</li>
+          ))}
+        </ul>
+        <p className="buyer-action">{buyer_action}</p>
+      </div>
     </section>
   )
 }

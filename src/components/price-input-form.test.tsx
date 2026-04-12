@@ -69,4 +69,9 @@ describe('PriceInputForm', () => {
       expect.objectContaining({ additionalCosts: 0 }),
     )
   })
+
+  it('disables the submit button when disabled prop is true', () => {
+    render(<PriceInputForm onSubmit={vi.fn()} disabled={true} />)
+    expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true)
+  })
 })

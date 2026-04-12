@@ -1,80 +1,66 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { PricingResults } from './pricing-results'
-import type { PricingAnalysis } from '../services/pricing-engine'
+import type { AIPricingAnalysis } from '../services/ollama-client'
 
-const baseAnalysis: PricingAnalysis = {
+const baseAnalysis: AIPricingAnalysis = {
   productName: 'Test Widget',
   category: 'electronics',
-  totalCost: 50,
-  retailPriceMin: 60,
-  retailPriceMax: 120,
-  msrp: 49.99,
-  wholesalePrice: 25,
-  retailMargin: 50.0,
-  supplierMargin: 0.0,
-  assumptions: [],
+  landed_cost: 65,
+  msrp: 120,
+  wholesale_price: 60,
+  supplier_margin: 8.3,
+  retail_margin: 50.0,
+  confidence_score: 82,
+  confidence_label: 'Good',
+  confidence_explanation: 'Margins are healthy and pricing is competitive for the U.S. market.',
+  buyer_decision: 'Strong Buy',
+  buyer_insights: ['Competitive price point', 'Strong margin for retailers'],
+  buyer_action: 'List at MSRP immediately.',
 }
 
 describe('PricingResults', () => {
-  it('renders all output labels', () => {
+  it('renders landed cost, MSRP, and wholesale price labels', () => {
+    const { container } = render(<PricingResults analysis={baseAnalysis} />)
+    expect(container.textContent).toMatch(/landed cost/i)
+    expect(container.textContent).toMatch(/msrp/i)
+    expect(container.textContent).toMatch(/wholesale/i)
+  })
+
+  it('renders retail margin and supplier margin formatted as XX.X%', () => {
     render(<PricingResults analysis={baseAnalysis} />)
-    expect(screen.getByText(/product/i)).toBeTruthy()
-    expect(screen.getByText(/category/i)).toBeTruthy()
-    expect(screen.getByText(/total cost/i)).toBeTruthy()
-    expect(screen.getByText(/msrp/i)).toBeTruthy()
-    expect(screen.getByText(/wholesale/i)).toBeTruthy()
-    expect(screen.getByText(/retail margin/i)).toBeTruthy()
-    expect(screen.getByText(/supplier margin/i)).toBeTruthy()
-  })
-
-  it('formats whole-dollar, .99, and .5 prices correctly', () => {
-    const analysis: PricingAnalysis = {
-      ...baseAnalysis,
-      retailPriceMax: 120,
-      msrp: 49.99,
-      wholesalePrice: 12.5,
-    }
-    const { container } = render(<PricingResults analysis={analysis} />)
-    expect(container.textContent).toContain('$120')    // whole dollar — no decimals
-    expect(container.textContent).toContain('$49.99')  // .99 price
-    expect(container.textContent).toContain('$12.50')  // .5 price renders as two decimal places
-  })
-
-  it('formats margins as XX.X%', () => {
-    render(
-      <PricingResults
-        analysis={{ ...baseAnalysis, retailMargin: 50.0, supplierMargin: 33.3 }}
-      />,
-    )
     expect(screen.getByText('50.0%')).toBeTruthy()
-    expect(screen.getByText('33.3%')).toBeTruthy()
+    expect(screen.getByText('8.3%')).toBeTruthy()
   })
 
-  it('shows retail price range containing both min and max', () => {
-    render(
-      <PricingResults
-        analysis={{ ...baseAnalysis, retailPriceMin: 60, retailPriceMax: 120 }}
-      />,
-    )
-    const { container } = render(
-      <PricingResults
-        analysis={{ ...baseAnalysis, retailPriceMin: 60, retailPriceMax: 120 }}
-      />,
-    )
-    expect(container.textContent).toMatch(/\$60.+\$120/)
+  it('renders confidence score as a number and confidence label as text', () => {
+    const { container } = render(<PricingResults analysis={baseAnalysis} />)
+    expect(container.textContent).toContain('82')
+    expect(screen.getByText(/good/i)).toBeTruthy()
   })
 
-  it('renders assumptions section when non-empty', () => {
-    render(
-      <PricingResults
-        analysis={{ ...baseAnalysis, assumptions: ['Additional costs assumed $0'] }}
-      />,
-    )
-    expect(screen.getByText('Additional costs assumed $0')).toBeTruthy()
+  it('renders confidence explanation text', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    expect(screen.getByText(/margins are healthy/i)).toBeTruthy()
   })
 
-  it('renders placeholder when passed null', () => {
+  it('renders buyer decision text', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    expect(screen.getByText(/strong buy/i)).toBeTruthy()
+  })
+
+  it('renders each buyer insight as a list item', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    expect(screen.getByText('Competitive price point')).toBeTruthy()
+    expect(screen.getByText('Strong margin for retailers')).toBeTruthy()
+  })
+
+  it('renders buyer action text', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    expect(screen.getByText('List at MSRP immediately.')).toBeTruthy()
+  })
+
+  it('renders placeholder when analysis is null', () => {
     render(<PricingResults analysis={null} />)
     expect(screen.getByText(/enter your costs/i)).toBeTruthy()
   })

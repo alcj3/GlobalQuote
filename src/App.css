@@ -62,6 +62,14 @@ body {
   border-top: 1px solid var(--color-border);
 }
 
+.error-banner {
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.875rem;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
 @media (max-width: 640px) {
   .app-main {
     margin: 16px auto;

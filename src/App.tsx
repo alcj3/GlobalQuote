@@ -1,15 +1,28 @@
 import { useState } from 'react'
 import { PriceInputForm } from './components/price-input-form'
 import { PricingResults } from './components/pricing-results'
-import { generatePricingAnalysis } from './services/pricing-engine'
-import type { CostInputs, PricingAnalysis } from './services/pricing-engine'
+import { fetchPricingAnalysis } from './services/ollama-client'
+import type { AIPricingAnalysis } from './services/ollama-client'
+import type { CostInputs } from './types'
 import './App.css'
 
 function App() {
-  const [analysis, setAnalysis] = useState<PricingAnalysis | null>(null)
+  const [analysis, setAnalysis] = useState<AIPricingAnalysis | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function handleSubmit(inputs: CostInputs) {
-    setAnalysis(generatePricingAnalysis(inputs))
+  async function handleSubmit(inputs: CostInputs) {
+    setLoading(true)
+    setError(null)
+    setAnalysis(null)
+    try {
+      const result = await fetchPricingAnalysis(inputs)
+      setAnalysis(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -21,10 +34,18 @@ function App() {
       <main className="app-main">
         <div className="card">
           <div className="card-section">
-            <PriceInputForm onSubmit={handleSubmit} />
+            <PriceInputForm onSubmit={handleSubmit} disabled={loading} />
           </div>
+          {error && (
+            <div className="card-section error-banner" role="alert">
+              <strong>Error:</strong> {error}
+            </div>
+          )}
           <div className="card-section">
-            <PricingResults analysis={analysis} />
+            {loading
+              ? <p className="results-placeholder">Analyzing your product...</p>
+              : <PricingResults analysis={analysis} />
+            }
           </div>
         </div>
       </main>
