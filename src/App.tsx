@@ -1,26 +1,40 @@
 import { useState } from 'react'
 import { PriceInputForm } from './components/price-input-form'
 import { PricingResults } from './components/pricing-results'
-import { fetchPricingAnalysis } from './services/ollama-client'
+import { extractProductData, fetchAnalysis } from './services/ollama-client'
 import type { AIPricingAnalysis } from './services/ollama-client'
 import './App.css'
 
+const LOADING_MESSAGES: Record<string, string> = {
+  extracting: 'Extracting product details...',
+  analyzing: 'Running pricing analysis...',
+}
+
 function App() {
   const [analysis, setAnalysis] = useState<AIPricingAnalysis | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loadingPhase, setLoadingPhase] = useState<'extracting' | 'analyzing' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(message: string) {
-    setLoading(true)
+    setLoadingPhase('extracting')
     setError(null)
     setAnalysis(null)
     try {
-      const result = await fetchPricingAnalysis(message)
-      setAnalysis(result)
+      const extracted = await extractProductData(message)
+      setLoadingPhase('analyzing')
+      const analysisPayload = await fetchAnalysis(extracted)
+      setAnalysis({
+        product: extracted.product,
+        category: extracted.category,
+        origin_country: extracted.origin_country,
+        quantity: extracted.quantity,
+        target_retailer: extracted.target_retailer,
+        ...analysisPayload,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
-      setLoading(false)
+      setLoadingPhase(null)
     }
   }
 
@@ -33,7 +47,7 @@ function App() {
       <main className="app-main">
         <div className="card">
           <div className="card-section">
-            <PriceInputForm onSubmit={handleSubmit} disabled={loading} />
+            <PriceInputForm onSubmit={handleSubmit} disabled={loadingPhase !== null} />
           </div>
           {error && (
             <div className="card-section error-banner" role="alert">
@@ -41,8 +55,8 @@ function App() {
             </div>
           )}
           <div className="card-section">
-            {loading
-              ? <p className="results-placeholder">Analyzing your product...</p>
+            {loadingPhase
+              ? <p className="results-placeholder">{LOADING_MESSAGES[loadingPhase]}</p>
               : <PricingResults analysis={analysis} />
             }
           </div>

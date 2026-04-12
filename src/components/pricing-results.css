@@ -63,6 +63,31 @@
   white-space: nowrap;
 }
 
+/* Tariff row highlight */
+.results-row-tariff dt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.results-tariff-rate {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+/* Total row */
+.results-row-total {
+  border-top: 1px solid var(--color-border);
+  margin-top: 2px;
+}
+
+.results-row-total dt,
+.results-row-total dd {
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
 .results-row-msrp {
   background: var(--color-msrp-bg) !important;
   border: 1px solid var(--color-msrp-border);
@@ -147,4 +172,21 @@
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+/* Assumptions */
+.assumptions-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.assumptions-list li {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.assumptions-list li:last-child {
+  margin-bottom: 0;
 }

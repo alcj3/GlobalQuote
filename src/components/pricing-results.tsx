@@ -20,19 +20,16 @@ export function PricingResults({ analysis }: Props) {
   }
 
   const {
-    productName,
+    product,
     category,
-    landed_cost,
-    msrp,
-    wholesale_price,
-    supplier_margin,
-    retail_margin,
-    confidence_score,
-    confidence_label,
-    confidence_explanation,
-    buyer_decision,
-    buyer_insights,
-    buyer_action,
+    origin_country,
+    quantity,
+    target_retailer,
+    landed_cost_breakdown,
+    pricing,
+    confidence,
+    buyer_perspective,
+    assumptions,
   } = analysis
 
   return (
@@ -43,22 +40,61 @@ export function PricingResults({ analysis }: Props) {
         <h3 className="results-section-title">Details</h3>
         <dl className="results-dl">
           <div className="results-row">
-            <dt>Product Name</dt>
-            <dd>{productName}</dd>
+            <dt>Product</dt>
+            <dd>{product}</dd>
           </div>
           <div className="results-row">
             <dt>Category</dt>
             <dd>{category}</dd>
           </div>
+          {origin_country && (
+            <div className="results-row">
+              <dt>Origin Country</dt>
+              <dd>{origin_country}</dd>
+            </div>
+          )}
+          {quantity !== null && (
+            <div className="results-row">
+              <dt>Quantity</dt>
+              <dd>{quantity.toLocaleString()} units</dd>
+            </div>
+          )}
+          {target_retailer && (
+            <div className="results-row">
+              <dt>Target Retailer</dt>
+              <dd>{target_retailer}</dd>
+            </div>
+          )}
         </dl>
       </div>
 
       <div className="results-section">
-        <h3 className="results-section-title">Cost Breakdown</h3>
+        <h3 className="results-section-title">Landed Cost Breakdown</h3>
         <dl className="results-dl">
           <div className="results-row">
-            <dt>Landed Cost</dt>
-            <dd>{formatPrice(landed_cost)}</dd>
+            <dt>Manufacturing</dt>
+            <dd>{formatPrice(landed_cost_breakdown.manufacturing)}</dd>
+          </div>
+          <div className="results-row">
+            <dt>Shipping</dt>
+            <dd>{formatPrice(landed_cost_breakdown.shipping)}</dd>
+          </div>
+          <div className="results-row results-row-tariff">
+            <dt>
+              Tariff
+              <span className="results-tariff-rate">{landed_cost_breakdown.tariff_rate_assumed}</span>
+            </dt>
+            <dd>{formatPrice(landed_cost_breakdown.tariff_cost)}</dd>
+          </div>
+          {landed_cost_breakdown.additional > 0 && (
+            <div className="results-row">
+              <dt>Additional</dt>
+              <dd>{formatPrice(landed_cost_breakdown.additional)}</dd>
+            </div>
+          )}
+          <div className="results-row results-row-total">
+            <dt>Total Landed Cost</dt>
+            <dd>{formatPrice(landed_cost_breakdown.total)}</dd>
           </div>
         </dl>
       </div>
@@ -68,11 +104,11 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row results-row-msrp">
             <dt>Suggested Retail Price (MSRP)</dt>
-            <dd>{formatPrice(msrp)}</dd>
+            <dd>{formatPrice(pricing.msrp)}</dd>
           </div>
           <div className="results-row">
             <dt>Suggested Wholesale Price</dt>
-            <dd>{formatPrice(wholesale_price)}</dd>
+            <dd>{formatPrice(pricing.wholesale_price)}</dd>
           </div>
         </dl>
       </div>
@@ -82,22 +118,22 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row">
             <dt>Estimated Retail Margin</dt>
-            <dd>{formatMargin(retail_margin)}</dd>
+            <dd>{formatMargin(pricing.retail_margin)}</dd>
           </div>
           <div className="results-row">
             <dt>Supplier Margin</dt>
-            <dd>{formatMargin(supplier_margin)}</dd>
+            <dd>{formatMargin(pricing.supplier_margin)}</dd>
           </div>
         </dl>
       </div>
 
       <div className="results-section">
         <h3 className="results-section-title">AI Confidence</h3>
-        <div className={`confidence-badge confidence-badge--${confidence_label.toLowerCase()}`}>
-          <span className="confidence-score">{confidence_score}</span>
-          <span className="confidence-label">{confidence_label}</span>
+        <div className={`confidence-badge confidence-badge--${confidence.label.toLowerCase()}`}>
+          <span className="confidence-score">{confidence.score}</span>
+          <span className="confidence-label">{confidence.label}</span>
         </div>
-        <p className="confidence-explanation">{confidence_explanation}</p>
+        <p className="confidence-explanation">{confidence.explanation}</p>
       </div>
 
       <div className="results-section">
@@ -105,16 +141,27 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row">
             <dt>Buyer Decision</dt>
-            <dd>{buyer_decision}</dd>
+            <dd>{buyer_perspective.decision}</dd>
           </div>
         </dl>
         <ul className="buyer-insights">
-          {buyer_insights.map((insight, i) => (
+          {buyer_perspective.insights.map((insight, i) => (
             <li key={i}>{insight}</li>
           ))}
         </ul>
-        <p className="buyer-action">{buyer_action}</p>
+        <p className="buyer-action">{buyer_perspective.action}</p>
       </div>
+
+      {assumptions.length > 0 && (
+        <div className="results-section results-assumptions">
+          <h3 className="results-section-title">Assumptions</h3>
+          <ul className="assumptions-list">
+            {assumptions.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

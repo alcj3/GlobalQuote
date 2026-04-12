@@ -1,70 +1,82 @@
-export interface AIPricingAnalysis {
-  productName: string
-  category: string
-  landed_cost: number
-  msrp: number
-  wholesale_price: number
-  supplier_margin: number
-  retail_margin: number
-  confidence_score: number
-  confidence_label: 'Strong' | 'Good' | 'Risky' | 'Weak'
-  confidence_explanation: string
-  buyer_decision: 'Strong Buy' | 'Consider with Negotiation' | 'Unlikely to Accept' | 'Reject'
-  buyer_insights: string[]
-  buyer_action: string
-}
-
-const REQUIRED_FIELDS: (keyof AIPricingAnalysis)[] = [
-  'productName',
-  'category',
-  'landed_cost',
-  'msrp',
-  'wholesale_price',
-  'supplier_margin',
-  'retail_margin',
-  'confidence_score',
-  'confidence_label',
-  'confidence_explanation',
-  'buyer_decision',
-  'buyer_insights',
-  'buyer_action',
-]
-
 const OLLAMA_URL = 'http://localhost:11434/api/generate'
 
-export function buildPrompt(message: string): string {
-  return `You are a U.S. market pricing analyst. A supplier has described their product in natural language.
+export interface ExtractedProduct {
+  product: string
+  category: string
+  origin_country: string | null
+  manufacturing_cost_per_unit: number
+  shipping_cost_per_unit: number
+  quantity: number | null
+  target_retailer: string | null
+  additional_costs_per_unit: number | null
+  error: string | null
+}
 
-Your job:
-1. Extract the product name, category, and any costs (manufacturing, shipping, additional) from their message.
-2. If the message is completely empty, pure gibberish, or contains no recognizable product or price information whatsoever, return ONLY this JSON and nothing else:
-   {"error": "Please describe your product and its costs, e.g. I sell hoodies, cost $6, shipping $2"}
-3. Otherwise — even if some details are vague or costs are missing — make reasonable assumptions and generate the full pricing analysis.
+export interface AIPricingAnalysis {
+  // echoed from extraction
+  product: string
+  category: string
+  origin_country: string | null
+  quantity: number | null
+  target_retailer: string | null
+  // from analysis call
+  landed_cost_breakdown: {
+    manufacturing: number
+    shipping: number
+    tariff_rate_assumed: string
+    tariff_cost: number
+    additional: number
+    total: number
+  }
+  pricing: {
+    msrp: number
+    wholesale_price: number
+    supplier_margin: number
+    retail_margin: number
+  }
+  confidence: {
+    score: number
+    label: 'Strong' | 'Good' | 'Risky' | 'Weak'
+    explanation: string
+  }
+  buyer_perspective: {
+    decision: string
+    insights: string[]
+    action: string
+  }
+  assumptions: string[]
+}
+
+// ─── Call 1: Extraction ───────────────────────────────────────────────────────
+
+export function buildExtractionPrompt(message: string): string {
+  return `You are a data extraction assistant. Extract structured product and cost information from the supplier's message.
 
 Supplier message: "${message}"
 
-Category must be one of: clothing, food, electronics, home_goods, other — infer from context.
-If a cost is not mentioned, assume $0 and note it in your analysis.
+Rules:
+- shipping_cost_per_unit: if a total shipping cost and quantity are given, divide them (e.g. $300 / 1000 units = 0.30)
+- category: infer from context — must be one of: clothing, food, electronics, home_goods, other
+- If you cannot identify a product name AND at least one cost, set error to:
+  "Please describe your product and its costs, e.g. I sell hoodies, cost $6, shipping $2"
+  and set all other fields to null or 0
+- Otherwise set error to null
 
-Return ONLY a JSON object with these exact fields (no explanation, no markdown):
+Return ONLY this JSON, no prose, no markdown:
 {
-  "productName": <string — product name you extracted>,
-  "category": <string — one of: clothing, food, electronics, home_goods, other>,
-  "landed_cost": <number — sum of all costs you extracted>,
-  "msrp": <number — suggested retail price for U.S. market>,
-  "wholesale_price": <number — typically ~50% of msrp>,
-  "supplier_margin": <number — percentage profit for the supplier>,
-  "retail_margin": <number — percentage profit for the retailer>,
-  "confidence_score": <integer 0-100>,
-  "confidence_label": <"Strong" | "Good" | "Risky" | "Weak">,
-  "confidence_explanation": <string — 1-2 sentences explaining the score>,
-  "buyer_decision": <"Strong Buy" | "Consider with Negotiation" | "Unlikely to Accept" | "Reject">,
-  "buyer_insights": <array of 2-4 strings — what a U.S. buyer would think>,
-  "buyer_action": <string — one actionable sentence for the supplier>
+  "product": <string>,
+  "category": <string>,
+  "origin_country": <string or null>,
+  "manufacturing_cost_per_unit": <number>,
+  "shipping_cost_per_unit": <number>,
+  "quantity": <number or null>,
+  "target_retailer": <string or null>,
+  "additional_costs_per_unit": <number or null>,
+  "error": <string or null>
 }`
 }
 
-export function parseOllamaResponse(raw: string): AIPricingAnalysis {
+export function parseExtractionResponse(raw: string): ExtractedProduct {
   const outer = JSON.parse(raw) as { response: string }
   let inner: Record<string, unknown>
   try {
@@ -77,30 +89,27 @@ export function parseOllamaResponse(raw: string): AIPricingAnalysis {
     throw new Error(inner.error)
   }
 
-  for (const field of REQUIRED_FIELDS) {
-    if (inner[field] === undefined || inner[field] === null) {
-      throw new Error(`Invalid response: missing required field "${field}"`)
-    }
+  if (!inner.product) {
+    throw new Error('Invalid response: missing required field "product"')
+  }
+  if (inner.manufacturing_cost_per_unit === undefined || inner.manufacturing_cost_per_unit === null) {
+    throw new Error('Invalid response: missing required field "manufacturing_cost_per_unit"')
   }
 
   return {
-    productName: inner.productName as string,
+    product: inner.product as string,
     category: inner.category as string,
-    landed_cost: inner.landed_cost as number,
-    msrp: inner.msrp as number,
-    wholesale_price: inner.wholesale_price as number,
-    supplier_margin: inner.supplier_margin as number,
-    retail_margin: inner.retail_margin as number,
-    confidence_score: inner.confidence_score as number,
-    confidence_label: inner.confidence_label as AIPricingAnalysis['confidence_label'],
-    confidence_explanation: inner.confidence_explanation as string,
-    buyer_decision: inner.buyer_decision as AIPricingAnalysis['buyer_decision'],
-    buyer_insights: inner.buyer_insights as string[],
-    buyer_action: inner.buyer_action as string,
+    origin_country: (inner.origin_country as string | null) ?? null,
+    manufacturing_cost_per_unit: inner.manufacturing_cost_per_unit as number,
+    shipping_cost_per_unit: (inner.shipping_cost_per_unit as number) ?? 0,
+    quantity: (inner.quantity as number | null) ?? null,
+    target_retailer: (inner.target_retailer as string | null) ?? null,
+    additional_costs_per_unit: (inner.additional_costs_per_unit as number | null) ?? null,
+    error: null,
   }
 }
 
-export async function fetchPricingAnalysis(message: string): Promise<AIPricingAnalysis> {
+export async function extractProductData(message: string): Promise<ExtractedProduct> {
   let response: Response
   try {
     response = await fetch(OLLAMA_URL, {
@@ -108,7 +117,7 @@ export async function fetchPricingAnalysis(message: string): Promise<AIPricingAn
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama3.2',
-        prompt: buildPrompt(message),
+        prompt: buildExtractionPrompt(message),
         stream: false,
         format: 'json',
       }),
@@ -121,6 +130,148 @@ export async function fetchPricingAnalysis(message: string): Promise<AIPricingAn
     throw new Error(`Ollama returned HTTP ${response.status}`)
   }
 
-  const raw = await response.text()
-  return parseOllamaResponse(raw)
+  return parseExtractionResponse(await response.text())
+}
+
+// ─── Call 2: Analysis ─────────────────────────────────────────────────────────
+
+export function buildAnalysisPrompt(extracted: ExtractedProduct): string {
+  return `You are a U.S. import pricing analyst with expertise in HTS tariff classification.
+
+Extracted product data:
+- Product: ${extracted.product}
+- Category: ${extracted.category}
+- Origin country: ${extracted.origin_country ?? 'unknown'}
+- Manufacturing cost/unit: $${extracted.manufacturing_cost_per_unit}
+- Shipping cost/unit: $${extracted.shipping_cost_per_unit}
+- Additional costs/unit: $${extracted.additional_costs_per_unit ?? 0}
+- Target retailer: ${extracted.target_retailer ?? 'generic U.S. retailer'}
+
+Instructions:
+1. Estimate the HTS tariff rate for this product category and origin country.
+   - Account for Section 301 tariffs (China), Vietnam surcharges, and any other known country-specific duties.
+   - State the assumed HTS code and rate explicitly in tariff_rate_assumed and in assumptions[].
+2. Calculate landed cost = manufacturing + shipping + tariff + additional.
+3. Generate MSRP and wholesale price for the U.S. market.
+4. Calculate supplier_margin = (wholesale_price - landed_cost) / wholesale_price * 100 and retail_margin = (msrp - wholesale_price) / msrp * 100.
+5. Score confidence 0-100. Penalise for unknown origin, high tariff uncertainty, or thin margins.
+6. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}.
+7. List every assumption made in the assumptions array (tariff rate, missing costs, inferred values).
+
+Return ONLY this JSON, no prose, no markdown:
+{
+  "landed_cost_breakdown": {
+    "manufacturing": <number>,
+    "shipping": <number>,
+    "tariff_rate_assumed": <string — e.g. "25% — Vietnam clothing HTS 6101.20">,
+    "tariff_cost": <number>,
+    "additional": <number>,
+    "total": <number>
+  },
+  "pricing": {
+    "msrp": <number>,
+    "wholesale_price": <number>,
+    "supplier_margin": <number — percentage>,
+    "retail_margin": <number — percentage>
+  },
+  "confidence": {
+    "score": <integer 0-100>,
+    "label": <"Strong" | "Good" | "Risky" | "Weak">,
+    "explanation": <string>
+  },
+  "buyer_perspective": {
+    "decision": <string>,
+    "insights": <array of strings>,
+    "action": <string>
+  },
+  "assumptions": <array of strings>
+}`
+}
+
+type AnalysisPayload = Omit<AIPricingAnalysis, 'product' | 'category' | 'origin_country' | 'quantity' | 'target_retailer'>
+
+const TOP_LEVEL_SECTIONS: (keyof AnalysisPayload)[] = [
+  'landed_cost_breakdown',
+  'pricing',
+  'confidence',
+  'buyer_perspective',
+  'assumptions',
+]
+
+export function parseAnalysisResponse(raw: string): AnalysisPayload {
+  const outer = JSON.parse(raw) as { response: string }
+  let inner: Record<string, unknown>
+  try {
+    inner = JSON.parse(outer.response) as Record<string, unknown>
+  } catch {
+    throw new Error('Invalid response: Ollama did not return valid JSON in the response field')
+  }
+
+  for (const section of TOP_LEVEL_SECTIONS) {
+    if (inner[section] === undefined || inner[section] === null) {
+      throw new Error(`Invalid response: missing required section "${section}"`)
+    }
+  }
+
+  const breakdown = inner.landed_cost_breakdown as Record<string, unknown>
+  if (breakdown.total === undefined || breakdown.total === null) {
+    throw new Error('Invalid response: missing required field "landed_cost_breakdown.total"')
+  }
+
+  const pricing = inner.pricing as Record<string, unknown>
+  if (pricing.msrp === undefined || pricing.msrp === null) {
+    throw new Error('Invalid response: missing required field "pricing.msrp"')
+  }
+
+  const confidence = inner.confidence as Record<string, unknown>
+  if (confidence.score === undefined || confidence.score === null) {
+    throw new Error('Invalid response: missing required field "confidence.score"')
+  }
+
+  return {
+    landed_cost_breakdown: inner.landed_cost_breakdown as AIPricingAnalysis['landed_cost_breakdown'],
+    pricing: inner.pricing as AIPricingAnalysis['pricing'],
+    confidence: inner.confidence as AIPricingAnalysis['confidence'],
+    buyer_perspective: inner.buyer_perspective as AIPricingAnalysis['buyer_perspective'],
+    assumptions: inner.assumptions as string[],
+  }
+}
+
+export async function fetchAnalysis(extracted: ExtractedProduct): Promise<AnalysisPayload> {
+  let response: Response
+  try {
+    response = await fetch(OLLAMA_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3.2',
+        prompt: buildAnalysisPrompt(extracted),
+        stream: false,
+        format: 'json',
+      }),
+    })
+  } catch {
+    throw new Error('Could not reach Ollama — make sure it is running at ' + OLLAMA_URL)
+  }
+
+  if (!response.ok) {
+    throw new Error(`Ollama returned HTTP ${response.status}`)
+  }
+
+  return parseAnalysisResponse(await response.text())
+}
+
+// ─── Orchestrator ─────────────────────────────────────────────────────────────
+
+export async function fetchPricingAnalysis(message: string): Promise<AIPricingAnalysis> {
+  const extracted = await extractProductData(message)
+  const analysis = await fetchAnalysis(extracted)
+  return {
+    product: extracted.product,
+    category: extracted.category,
+    origin_country: extracted.origin_country,
+    quantity: extracted.quantity,
+    target_retailer: extracted.target_retailer,
+    ...analysis,
+  }
 }

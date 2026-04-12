@@ -4,60 +4,94 @@ import { PricingResults } from './pricing-results'
 import type { AIPricingAnalysis } from '../services/ollama-client'
 
 const baseAnalysis: AIPricingAnalysis = {
-  productName: 'Test Widget',
-  category: 'electronics',
-  landed_cost: 65,
-  msrp: 120,
-  wholesale_price: 60,
-  supplier_margin: 8.3,
-  retail_margin: 50.0,
-  confidence_score: 82,
-  confidence_label: 'Good',
-  confidence_explanation: 'Margins are healthy and pricing is competitive for the U.S. market.',
-  buyer_decision: 'Strong Buy',
-  buyer_insights: ['Competitive price point', 'Strong margin for retailers'],
-  buyer_action: 'List at MSRP immediately.',
+  product: 'Ceramic Mug',
+  category: 'home_goods',
+  origin_country: 'Vietnam',
+  quantity: 1000,
+  target_retailer: 'Walmart',
+  landed_cost_breakdown: {
+    manufacturing: 3,
+    shipping: 0.5,
+    tariff_rate_assumed: '25% — Vietnam home goods HTS 6912.00',
+    tariff_cost: 0.88,
+    additional: 0,
+    total: 4.38,
+  },
+  pricing: {
+    msrp: 12,
+    wholesale_price: 6,
+    supplier_margin: 27.0,
+    retail_margin: 50.0,
+  },
+  confidence: {
+    score: 72,
+    label: 'Good',
+    explanation: 'Solid margins despite tariff exposure.',
+  },
+  buyer_perspective: {
+    decision: 'Consider with Negotiation',
+    insights: ['Tariff exposure is a concern', 'Price point competitive for Walmart'],
+    action: 'Negotiate manufacturing cost below $2.50.',
+  },
+  assumptions: [
+    'Assumed 25% tariff rate for Vietnam ceramics under HTS 6912.00',
+    'Additional costs assumed $0',
+  ],
 }
 
 describe('PricingResults', () => {
-  it('renders landed cost, MSRP, and wholesale price labels', () => {
+  it('renders Details section with product, category, origin, quantity, retailer', () => {
     const { container } = render(<PricingResults analysis={baseAnalysis} />)
-    expect(container.textContent).toMatch(/landed cost/i)
+    expect(container.textContent).toContain('Ceramic Mug')
+    expect(container.textContent).toContain('home_goods')
+    expect(container.textContent).toContain('Vietnam')
+    expect(container.textContent).toContain('1,000')
+    expect(container.textContent).toContain('Walmart')
+  })
+
+  it('renders landed cost breakdown with all rows', () => {
+    const { container } = render(<PricingResults analysis={baseAnalysis} />)
+    expect(container.textContent).toMatch(/manufacturing/i)
+    expect(container.textContent).toMatch(/shipping/i)
+    expect(container.textContent).toMatch(/tariff/i)
+    expect(container.textContent).toMatch(/total/i)
+  })
+
+  it('renders the tariff rate assumed as text', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    expect(screen.getByText('25% — Vietnam home goods HTS 6912.00')).toBeTruthy()
+  })
+
+  it('renders pricing section with MSRP and wholesale', () => {
+    const { container } = render(<PricingResults analysis={baseAnalysis} />)
     expect(container.textContent).toMatch(/msrp/i)
     expect(container.textContent).toMatch(/wholesale/i)
   })
 
-  it('renders retail margin and supplier margin formatted as XX.X%', () => {
+  it('renders supplier and retail margins formatted as XX.X%', () => {
     render(<PricingResults analysis={baseAnalysis} />)
+    expect(screen.getByText('27.0%')).toBeTruthy()
     expect(screen.getByText('50.0%')).toBeTruthy()
-    expect(screen.getByText('8.3%')).toBeTruthy()
   })
 
-  it('renders confidence score as a number and confidence label as text', () => {
+  it('renders confidence score and label', () => {
     const { container } = render(<PricingResults analysis={baseAnalysis} />)
-    expect(container.textContent).toContain('82')
-    expect(screen.getByText(/good/i)).toBeTruthy()
+    expect(container.textContent).toContain('72')
+    // Use exact match to avoid collision with "home goods" in the tariff rate string
+    expect(screen.getByText('Good')).toBeTruthy()
   })
 
-  it('renders confidence explanation text', () => {
+  it('renders buyer perspective decision, insights, and action', () => {
     render(<PricingResults analysis={baseAnalysis} />)
-    expect(screen.getByText(/margins are healthy/i)).toBeTruthy()
+    expect(screen.getByText(/consider with negotiation/i)).toBeTruthy()
+    expect(screen.getByText('Tariff exposure is a concern')).toBeTruthy()
+    expect(screen.getByText('Negotiate manufacturing cost below $2.50.')).toBeTruthy()
   })
 
-  it('renders buyer decision text', () => {
+  it('renders assumptions section with each assumption as a list item', () => {
     render(<PricingResults analysis={baseAnalysis} />)
-    expect(screen.getByText(/strong buy/i)).toBeTruthy()
-  })
-
-  it('renders each buyer insight as a list item', () => {
-    render(<PricingResults analysis={baseAnalysis} />)
-    expect(screen.getByText('Competitive price point')).toBeTruthy()
-    expect(screen.getByText('Strong margin for retailers')).toBeTruthy()
-  })
-
-  it('renders buyer action text', () => {
-    render(<PricingResults analysis={baseAnalysis} />)
-    expect(screen.getByText('List at MSRP immediately.')).toBeTruthy()
+    expect(screen.getByText('Assumed 25% tariff rate for Vietnam ceramics under HTS 6912.00')).toBeTruthy()
+    expect(screen.getByText('Additional costs assumed $0')).toBeTruthy()
   })
 
   it('renders placeholder when analysis is null', () => {
