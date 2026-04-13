@@ -1,8 +1,4 @@
-import type { TariffResult } from './hts-client'
-import { getRetailerMargins } from './retailer-config'
-
-const OLLAMA_BASE = 'http://localhost:11434'
-const OLLAMA_URL = `${OLLAMA_BASE}/api/generate`
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ExtractedProduct {
   product: string
@@ -51,288 +47,32 @@ export interface AIPricingAnalysis {
   assumptions: string[]
 }
 
-// ─── Warm-up ──────────────────────────────────────────────────────────────────
-
-export async function warmOllama(): Promise<void> {
-  try {
-    await fetch(`${OLLAMA_BASE}/api/tags`)
-  } catch {
-    // silently ignore — warm-up is best-effort
-  }
-}
-
-// ─── Call 1: Extraction ───────────────────────────────────────────────────────
-
-export function buildExtractionPrompt(message: string): string {
-  return `You are a data extraction assistant. Extract structured product and cost information from the supplier's message.
-
-Supplier message: "${message}"
-
-Rules:
-- shipping_cost_per_unit: extract the per-unit shipping cost using these patterns:
-  - Per-unit phrasing: "$2 shipping per unit" → 2.00
-  - Per-unit phrasing: "shipping is $2 each" → 2.00
-  - Bulk total divided by quantity: "shipping costs $300 for 1000 units" → 0.30
-  - Bulk total divided by quantity: "I pay $500 to ship 200 units" → 2.50
-  - If shipping cost cannot be determined from the message, set shipping_cost_per_unit to null
-- category: infer from context — must be one of: clothing, food, electronics, home_goods, other
-- If you cannot identify a product name AND at least one cost, set error to:
-  "Please describe your product and its costs, e.g. I sell hoodies, cost $6, shipping $2"
-  and set all other fields to null or 0
-- Otherwise set error to null
-
-Return ONLY this JSON, no prose, no markdown:
-{
-  "product": <string>,
-  "category": <string>,
-  "origin_country": <string or null>,
-  "manufacturing_cost_per_unit": <number>,
-  "shipping_cost_per_unit": <number or null — null if shipping cost cannot be determined>,
-  "quantity": <number or null>,
-  "target_retailer": <string or null>,
-  "additional_costs_per_unit": <number or null>,
-  "error": <string or null>
-}`
-}
-
-export function parseExtractionResponse(raw: string): ExtractedProduct {
-  const outer = JSON.parse(raw) as { response: string }
-  let inner: Record<string, unknown>
-  try {
-    inner = JSON.parse(outer.response) as Record<string, unknown>
-  } catch {
-    throw new Error('Invalid response: Ollama did not return valid JSON in the response field')
-  }
-
-  if (typeof inner.error === 'string') {
-    throw new Error(inner.error)
-  }
-
-  if (!inner.product) {
-    throw new Error('Invalid response: missing required field "product"')
-  }
-  if (inner.manufacturing_cost_per_unit === undefined || inner.manufacturing_cost_per_unit === null) {
-    throw new Error('Invalid response: missing required field "manufacturing_cost_per_unit"')
-  }
-
-  return {
-    product: inner.product as string,
-    category: inner.category as string,
-    origin_country: (inner.origin_country as string | null) ?? null,
-    manufacturing_cost_per_unit: inner.manufacturing_cost_per_unit as number,
-    shipping_cost_per_unit: (inner.shipping_cost_per_unit as number | null) ?? null,
-    quantity: (inner.quantity as number | null) ?? null,
-    target_retailer: (inner.target_retailer as string | null) ?? null,
-    additional_costs_per_unit: (inner.additional_costs_per_unit as number | null) ?? null,
-    error: null,
-  }
-}
-
-export async function extractProductData(message: string): Promise<ExtractedProduct> {
-  let response: Response
-  try {
-    response = await fetch(OLLAMA_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama3.2',
-        prompt: buildExtractionPrompt(message),
-        stream: false,
-        format: 'json',
-      }),
-    })
-  } catch {
-    throw new Error('Pricing service unavailable. Please try again.')
-  }
-
-  if (!response.ok) {
-    throw new Error(`Pricing service unavailable. Please try again. (HTTP ${response.status})`)
-  }
-
-  return parseExtractionResponse(await response.text())
-}
-
-// ─── Call 2: Analysis ─────────────────────────────────────────────────────────
-
-export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: TariffResult): string {
-  const margins = getRetailerMargins(extracted.target_retailer)
-  const retailerInstruction = `Retailer margin context:
-- ${margins.name} expects a retail margin of ${margins.min_margin}–${margins.max_margin}%.
-- In buyer_perspective.insights, include one insight about retail_margin direction for ${margins.name}: if retail_margin is below ${margins.min_margin}%, state it is too thin; if above ${margins.max_margin}%, state it is too wide; if between ${margins.min_margin}% and ${margins.max_margin}%, state it is on-target.
-- In buyer_perspective.insights, include one insight about supplier_margin direction: if supplier_margin is below 25%, state it is too thin; if above 45%, state it is too wide; if between 25% and 45%, state it is on-target.
-- If retail_margin is more than 5 percentage points outside this range, penalise the confidence score.`
-
-  const tariffInstruction = tariff
-    ? `1. The duty rate for this product has been looked up from the HTS schedule:
-   HTS ${tariff.hts_code} — total rate ${tariff.total_rate}% (${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge).
-   Use this exact rate. Set tariff_rate_assumed to "${tariff.total_rate}% — HTS ${tariff.hts_code} (${extracted.origin_country ?? 'origin'}: ${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge, HTS schedule)".
-   Do NOT estimate or override this value.
-   Add to assumptions[]: "Tariff rate sourced from HTS category map: ${tariff.hts_code} at ${tariff.total_rate}%"`
-    : `1. Estimate the HTS tariff rate for this product category and origin country.
-   - Account for Section 301 tariffs (China), Vietnam surcharges, and any other known country-specific duties.
-   - State the assumed HTS code and rate explicitly in tariff_rate_assumed and in assumptions[].`
-
-  const shippingDisplay = extracted.shipping_cost_per_unit !== null
-    ? `$${extracted.shipping_cost_per_unit}`
-    : 'unknown'
-  const shippingAssumptionInstruction = extracted.shipping_cost_per_unit === null
-    ? '\n   - Shipping cost was not provided. Estimate a reasonable shipping cost per unit and add a shipping assumption to assumptions[].'
-    : ''
-
-  const msrpFloorInstruction =
-    (extracted.category === 'home_goods' || extracted.category === 'home_ceramics')
-      ? `\n   Price floor for home_goods / home_ceramics: U.S. retail reality for ceramic mugs and bowls is $8–15.
-   If the formula produces an msrp below $7, scale up wholesale_price so that msrp is at least $8.
-   Use msrp = 8, then back-calculate: wholesale_price = msrp * (1 - retail_margin / 100).`
-      : extracted.category === 'clothing'
-        ? `\n   Price floor for clothing: U.S. retail reality for imported apparel is $20–60.
-   If the formula produces an msrp below $19, scale up wholesale_price so that msrp is at least $20.
-   Use msrp = 20, then back-calculate: wholesale_price = msrp * (1 - retail_margin / 100).`
-        : ''
-
-  return `You are a U.S. import pricing analyst with expertise in HTS tariff classification.
-
-Extracted product data:
-- Product: ${extracted.product}
-- Category: ${extracted.category}
-- Origin country: ${extracted.origin_country ?? 'unknown'}
-- Manufacturing cost/unit: $${extracted.manufacturing_cost_per_unit}
-- Shipping cost/unit: ${shippingDisplay}
-- Additional costs/unit: $${extracted.additional_costs_per_unit ?? 0}
-- Target retailer: ${extracted.target_retailer ?? 'generic U.S. retailer'}
-
-Instructions:
-${tariffInstruction}
-2. Calculate landed cost = manufacturing + shipping + tariff + additional.
-   tariff_cost = manufacturing_cost_per_unit * (total_rate / 100). Shipping is not included in the duty base.${shippingAssumptionInstruction}
-3. Derive wholesale_price and msrp from target margins — NEVER set wholesale_price equal to or less than landed_cost:
-   - Choose supplier_margin between 25% and 45%
-   - wholesale_price = landed_cost / (1 - supplier_margin / 100)
-   - Choose retail_margin to meet the retailer's expected range (see step 6)
-   - msrp = wholesale_price / (1 - retail_margin / 100)${msrpFloorInstruction}
-4. Verify using these formulas and confirm both margins are positive before returning JSON:
-   - Supplier Margin = (wholesale_price - landed_cost) / wholesale_price * 100
-   - Retail Margin = (msrp - wholesale_price) / msrp * 100
-   Verify margin consistency: wholesale_price must be strictly between landed_cost and msrp before returning JSON.
-5. Score confidence 0-100. Penalise for unknown origin, high tariff uncertainty, or thin margins.
-6. ${retailerInstruction}
-7. Tailor the buyer_perspective to ${extracted.target_retailer ?? 'generic U.S. retailer'}. In buyer_perspective.insights, reference the exact supplier_margin and retail_margin values you calculated in step 4 so insights are grounded in the real numbers. buyer_perspective.decision must be a non-empty string, e.g. 'Proceed with negotiation' or 'Strong buy at current terms'.
-8. List every assumption made in the assumptions array (tariff rate, missing costs, inferred values).
-
-Return ONLY this JSON, no prose, no markdown:
-{
-  "landed_cost_breakdown": {
-    "manufacturing": <number>,
-    "shipping": <number>,
-    "tariff_rate_assumed": <string — e.g. "25% — Vietnam clothing HTS 6101.20">,
-    "tariff_cost": <number>,
-    "additional": <number>,
-    "total": <number>
-  },
-  "pricing": {
-    "msrp": <number>,
-    "wholesale_price": <number>,
-    "supplier_margin": <number — percentage>,
-    "retail_margin": <number — percentage>
-  },
-  "confidence": {
-    "score": <integer 0-100>,
-    "label": <"Strong" | "Good" | "Risky" | "Weak">,
-    "explanation": <string>
-  },
-  "buyer_perspective": {
-    "decision": <string>,
-    "insights": <array of strings>,
-    "action": <string>
-  },
-  "assumptions": <array of strings>
-}`
-}
-
-type AnalysisPayload = Omit<AIPricingAnalysis, 'product' | 'category' | 'origin_country' | 'quantity' | 'target_retailer'>
-
-const TOP_LEVEL_SECTIONS: (keyof AnalysisPayload)[] = [
-  'landed_cost_breakdown',
-  'pricing',
-  'confidence',
-  'buyer_perspective',
-  'assumptions',
-]
-
-export function parseAnalysisResponse(raw: string): AnalysisPayload {
-  const outer = JSON.parse(raw) as { response: string }
-  let inner: Record<string, unknown>
-  try {
-    inner = JSON.parse(outer.response) as Record<string, unknown>
-  } catch {
-    throw new Error('Invalid response: Ollama did not return valid JSON in the response field')
-  }
-
-  for (const section of TOP_LEVEL_SECTIONS) {
-    if (inner[section] === undefined || inner[section] === null) {
-      throw new Error(`Invalid response: missing required section "${section}"`)
-    }
-  }
-
-  const breakdown = inner.landed_cost_breakdown as Record<string, unknown>
-  if (breakdown.total === undefined || breakdown.total === null) {
-    throw new Error('Invalid response: missing required field "landed_cost_breakdown.total"')
-  }
-
-  const pricing = inner.pricing as Record<string, unknown>
-  if (pricing.msrp === undefined || pricing.msrp === null) {
-    throw new Error('Invalid response: missing required field "pricing.msrp"')
-  }
-
-  const confidence = inner.confidence as Record<string, unknown>
-  if (confidence.score === undefined || confidence.score === null) {
-    throw new Error('Invalid response: missing required field "confidence.score"')
-  }
-
-  return {
-    landed_cost_breakdown: inner.landed_cost_breakdown as AIPricingAnalysis['landed_cost_breakdown'],
-    pricing: inner.pricing as AIPricingAnalysis['pricing'],
-    confidence: inner.confidence as AIPricingAnalysis['confidence'],
-    buyer_perspective: inner.buyer_perspective as AIPricingAnalysis['buyer_perspective'],
-    assumptions: inner.assumptions as string[],
-  }
-}
-
-export async function fetchAnalysis(extracted: ExtractedProduct, tariff?: TariffResult): Promise<AnalysisPayload> {
-  let response: Response
-  try {
-    response = await fetch(OLLAMA_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama3.2',
-        prompt: buildAnalysisPrompt(extracted, tariff),
-        stream: false,
-        format: 'json',
-      }),
-    })
-  } catch {
-    throw new Error('Pricing service unavailable. Please try again.')
-  }
-
-  if (!response.ok) {
-    throw new Error(`Pricing service unavailable. Please try again. (HTTP ${response.status})`)
-  }
-
-  return parseAnalysisResponse(await response.text())
-}
-
-// ─── Orchestrator ─────────────────────────────────────────────────────────────
+// ─── Client ───────────────────────────────────────────────────────────────────
 
 export async function fetchPricingAnalysis(message: string): Promise<AIPricingAnalysis> {
-  const extracted = await extractProductData(message)
-  const analysis = await fetchAnalysis(extracted)
-  return {
-    product: extracted.product,
-    category: extracted.category,
-    origin_country: extracted.origin_country,
-    quantity: extracted.quantity,
-    target_retailer: extracted.target_retailer,
-    ...analysis,
+  let response: Response
+  try {
+    response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    })
+  } catch {
+    throw new Error('Pricing service unavailable. Please try again.')
   }
+
+  let data: unknown
+  try {
+    data = await response.json()
+  } catch {
+    throw new Error('Pricing service unavailable. Please try again.')
+  }
+
+  if (!response.ok) {
+    const err = data as { error?: string }
+    if (response.status === 400 && err?.error) throw new Error(err.error)
+    throw new Error('Pricing service unavailable. Please try again.')
+  }
+
+  return data as AIPricingAnalysis
 }
