@@ -1,13 +1,16 @@
-/// <reference types="vitest" />
 import { defineConfig } from 'vite'
+import { resolve } from 'path'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test-setup.ts'],
-    exclude: ['**/node_modules/**', '**/tests/**'],
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        landing: resolve(__dirname, 'landing/index.html'),
+      },
+    },
   },
 })
