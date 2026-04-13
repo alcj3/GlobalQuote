@@ -27,7 +27,6 @@ export function PricingResults({ analysis }: Props) {
     target_retailer,
     landed_cost_breakdown,
     pricing,
-    confidence,
     buyer_perspective,
     assumptions,
   } = analysis
@@ -125,15 +124,6 @@ export function PricingResults({ analysis }: Props) {
             <dd>{formatMargin(pricing.supplier_margin)}</dd>
           </div>
         </dl>
-      </div>
-
-      <div className="results-section">
-        <h3 className="results-section-title">AI Confidence</h3>
-        <div className={`confidence-badge confidence-badge--${confidence.label.toLowerCase()}`}>
-          <span className="confidence-score">{confidence.score}</span>
-          <span className="confidence-label">{confidence.label}</span>
-        </div>
-        <p className="confidence-explanation">{confidence.explanation}</p>
       </div>
 
       <div className="results-section">

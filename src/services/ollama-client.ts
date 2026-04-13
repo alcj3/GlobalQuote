@@ -1,7 +1,8 @@
 import type { TariffResult } from './hts-client'
 import { getRetailerMargins } from './retailer-config'
 
-const OLLAMA_URL = 'http://localhost:11434/api/generate'
+const OLLAMA_BASE = 'http://localhost:11434'
+const OLLAMA_URL = `${OLLAMA_BASE}/api/generate`
 
 export interface ExtractedProduct {
   product: string
@@ -48,6 +49,16 @@ export interface AIPricingAnalysis {
     action: string
   }
   assumptions: string[]
+}
+
+// ─── Warm-up ──────────────────────────────────────────────────────────────────
+
+export async function warmOllama(): Promise<void> {
+  try {
+    await fetch(`${OLLAMA_BASE}/api/tags`)
+  } catch {
+    // silently ignore — warm-up is best-effort
+  }
 }
 
 // ─── Call 1: Extraction ───────────────────────────────────────────────────────
@@ -131,11 +142,11 @@ export async function extractProductData(message: string): Promise<ExtractedProd
       }),
     })
   } catch {
-    throw new Error('Could not reach Ollama — make sure it is running at ' + OLLAMA_URL)
+    throw new Error('Pricing service unavailable. Please try again.')
   }
 
   if (!response.ok) {
-    throw new Error(`Ollama returned HTTP ${response.status}`)
+    throw new Error(`Pricing service unavailable. Please try again. (HTTP ${response.status})`)
   }
 
   return parseExtractionResponse(await response.text())
@@ -147,16 +158,16 @@ export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: Tariff
   const margins = getRetailerMargins(extracted.target_retailer)
   const retailerInstruction = `Retailer margin context:
 - ${margins.name} expects a retail margin of ${margins.min_margin}–${margins.max_margin}%.
-- Evaluate whether the suggested retail_margin falls within, above, or below this range.
-- In buyer_perspective.insights, include one insight explicitly stating whether the margin is on-target, too thin, or too wide for ${margins.name}.
+- In buyer_perspective.insights, include one insight about retail_margin direction for ${margins.name}: if retail_margin is below ${margins.min_margin}%, state it is too thin; if above ${margins.max_margin}%, state it is too wide; if between ${margins.min_margin}% and ${margins.max_margin}%, state it is on-target.
+- In buyer_perspective.insights, include one insight about supplier_margin direction: if supplier_margin is below 25%, state it is too thin; if above 45%, state it is too wide; if between 25% and 45%, state it is on-target.
 - If retail_margin is more than 5 percentage points outside this range, penalise the confidence score.`
 
   const tariffInstruction = tariff
-    ? `1. The duty rate for this product has been pre-fetched from the USITC HTS database:
+    ? `1. The duty rate for this product has been looked up from the HTS schedule:
    HTS ${tariff.hts_code} — total rate ${tariff.total_rate}% (${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge).
-   Use this exact rate. Set tariff_rate_assumed to "${tariff.total_rate}% — HTS ${tariff.hts_code} (${extracted.origin_country ?? 'origin'}: ${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge, USITC)".
+   Use this exact rate. Set tariff_rate_assumed to "${tariff.total_rate}% — HTS ${tariff.hts_code} (${extracted.origin_country ?? 'origin'}: ${tariff.base_rate}% MFN + ${tariff.surcharge}% surcharge, HTS schedule)".
    Do NOT estimate or override this value.
-   Add to assumptions[]: "Tariff rate sourced from USITC HTS API: ${tariff.hts_code} at ${tariff.total_rate}%"`
+   Add to assumptions[]: "Tariff rate sourced from HTS category map: ${tariff.hts_code} at ${tariff.total_rate}%"`
     : `1. Estimate the HTS tariff rate for this product category and origin country.
    - Account for Section 301 tariffs (China), Vietnam surcharges, and any other known country-specific duties.
    - State the assumed HTS code and rate explicitly in tariff_rate_assumed and in assumptions[].`
@@ -168,11 +179,16 @@ export function buildAnalysisPrompt(extracted: ExtractedProduct, tariff?: Tariff
     ? '\n   - Shipping cost was not provided. Estimate a reasonable shipping cost per unit and add a shipping assumption to assumptions[].'
     : ''
 
-  const msrpFloorInstruction = (extracted.category === 'home_goods' || extracted.category === 'home_ceramics')
-    ? `\n   Price floor for home_goods / home_ceramics: U.S. retail reality for ceramic mugs and bowls is $8–15.
+  const msrpFloorInstruction =
+    (extracted.category === 'home_goods' || extracted.category === 'home_ceramics')
+      ? `\n   Price floor for home_goods / home_ceramics: U.S. retail reality for ceramic mugs and bowls is $8–15.
    If the formula produces an msrp below $7, scale up wholesale_price so that msrp is at least $8.
    Use msrp = 8, then back-calculate: wholesale_price = msrp * (1 - retail_margin / 100).`
-    : ''
+      : extracted.category === 'clothing'
+        ? `\n   Price floor for clothing: U.S. retail reality for imported apparel is $20–60.
+   If the formula produces an msrp below $19, scale up wholesale_price so that msrp is at least $20.
+   Use msrp = 20, then back-calculate: wholesale_price = msrp * (1 - retail_margin / 100).`
+        : ''
 
   return `You are a U.S. import pricing analyst with expertise in HTS tariff classification.
 
@@ -187,7 +203,8 @@ Extracted product data:
 
 Instructions:
 ${tariffInstruction}
-2. Calculate landed cost = manufacturing + shipping + tariff + additional.${shippingAssumptionInstruction}
+2. Calculate landed cost = manufacturing + shipping + tariff + additional.
+   tariff_cost = manufacturing_cost_per_unit * (total_rate / 100). Shipping is not included in the duty base.${shippingAssumptionInstruction}
 3. Derive wholesale_price and msrp from target margins — NEVER set wholesale_price equal to or less than landed_cost:
    - Choose supplier_margin between 25% and 45%
    - wholesale_price = landed_cost / (1 - supplier_margin / 100)
@@ -295,11 +312,11 @@ export async function fetchAnalysis(extracted: ExtractedProduct, tariff?: Tariff
       }),
     })
   } catch {
-    throw new Error('Could not reach Ollama — make sure it is running at ' + OLLAMA_URL)
+    throw new Error('Pricing service unavailable. Please try again.')
   }
 
   if (!response.ok) {
-    throw new Error(`Ollama returned HTTP ${response.status}`)
+    throw new Error(`Pricing service unavailable. Please try again. (HTTP ${response.status})`)
   }
 
   return parseAnalysisResponse(await response.text())

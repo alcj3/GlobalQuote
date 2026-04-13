@@ -74,11 +74,11 @@ describe('PricingResults', () => {
     expect(screen.getByText('50.0%')).toBeTruthy()
   })
 
-  it('renders confidence score and label', () => {
+  it('does not render confidence score, label, or explanation', () => {
     const { container } = render(<PricingResults analysis={baseAnalysis} />)
-    expect(container.textContent).toContain('72')
-    // Use exact match to avoid collision with "home goods" in the tariff rate string
-    expect(screen.getByText('Good')).toBeTruthy()
+    expect(container.textContent).not.toContain('72')
+    expect(container.textContent).not.toContain('Good')
+    expect(container.textContent).not.toContain('Solid margins despite tariff exposure.')
   })
 
   it('renders buyer perspective decision, insights, and action', () => {

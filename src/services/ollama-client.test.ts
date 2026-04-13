@@ -7,6 +7,7 @@ import {
   parseAnalysisResponse,
   fetchPricingAnalysis,
   fetchAnalysis,
+  warmOllama,
 } from './ollama-client'
 import type { ExtractedProduct } from './ollama-client'
 import type { TariffResult } from './hts-client'
@@ -191,14 +192,42 @@ describe('extractProductData', () => {
     expect(result.origin_country).toBe('Vietnam')
   })
 
-  it('throws "Could not reach Ollama" on network failure', async () => {
+  it('throws "Pricing service unavailable" on network failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
-    await expect(extractProductData(baseMessage)).rejects.toThrow(/Could not reach Ollama/i)
+    await expect(extractProductData(baseMessage)).rejects.toThrow(/Pricing service unavailable/i)
   })
 
   it('throws HTTP status on non-200 response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, text: () => Promise.resolve('') }))
     await expect(extractProductData(baseMessage)).rejects.toThrow(/503/)
+  })
+})
+
+// ─── warmOllama ───────────────────────────────────────────────────────────────
+
+describe('warmOllama', () => {
+  it('calls fetch to the /api/tags endpoint', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 })
+    vi.stubGlobal('fetch', mockFetch)
+    await warmOllama()
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:11434/api/tags')
+    vi.unstubAllGlobals()
+  })
+
+  it('resolves without throwing when fetch rejects', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    await expect(warmOllama()).resolves.toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+})
+
+// ─── fetchAnalysis ────────────────────────────────────────────────────────────
+
+describe('fetchAnalysis', () => {
+  it('throws "Pricing service unavailable" on network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    await expect(fetchAnalysis(validExtraction)).rejects.toThrow(/Pricing service unavailable/i)
+    vi.unstubAllGlobals()
   })
 })
 
@@ -344,6 +373,22 @@ describe('buildAnalysisPrompt — retailer margin context', () => {
     const prompt = buildAnalysisPrompt(validExtraction)
     expect(prompt).toContain('penalise')
   })
+
+  it('includes explicit too-thin / on-target / too-wide direction for retail_margin with retailer numbers', () => {
+    const prompt = buildAnalysisPrompt(validExtraction) // Walmart: 25–30%
+    expect(prompt).toContain('too thin')
+    expect(prompt).toContain('too wide')
+    expect(prompt).toContain('on-target')
+    // retailer numbers interpolated
+    expect(prompt).toContain('below 25%')
+    expect(prompt).toContain('above 30%')
+  })
+
+  it('includes explicit too-thin / on-target / too-wide direction for supplier_margin with 25–45% range', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('below 25%')
+    expect(prompt).toContain('above 45%')
+  })
 })
 
 // ─── buildAnalysisPrompt — MSRP price floor ──────────────────────────────────
@@ -362,9 +407,16 @@ describe('buildAnalysisPrompt — MSRP price floor', () => {
     expect(prompt).toContain('$8')
   })
 
-  it('does not include the price floor instruction for clothing', () => {
+  it('includes $19 check threshold and $20 floor for clothing category', () => {
     const prompt = buildAnalysisPrompt({ ...validExtraction, category: 'clothing' })
+    expect(prompt).toContain('$19')
+    expect(prompt).toContain('$20')
+  })
+
+  it('does not include any price floor instruction for food', () => {
+    const prompt = buildAnalysisPrompt({ ...validExtraction, category: 'food' })
     expect(prompt).not.toContain('below $7')
+    expect(prompt).not.toContain('below $19')
   })
 })
 
@@ -387,6 +439,30 @@ describe('buildAnalysisPrompt — wholesale price formulas', () => {
   })
 })
 
+// ─── buildAnalysisPrompt — tariff duty base ──────────────────────────────────
+
+describe('buildAnalysisPrompt — tariff duty base', () => {
+  const tariff: TariffResult = {
+    hts_code: '6109.10',
+    base_rate: 16.5,
+    surcharge: 20,
+    total_rate: 36.5,
+    source: 'category_map',
+  }
+
+  it('includes tariff_cost formula on manufacturing cost only when tariff is provided', () => {
+    const prompt = buildAnalysisPrompt(validExtraction, tariff)
+    expect(prompt).toContain('manufacturing_cost_per_unit * (total_rate / 100)')
+    expect(prompt).toContain('Shipping is not included in the duty base')
+  })
+
+  it('includes tariff_cost formula in the estimate branch (no tariff provided)', () => {
+    const prompt = buildAnalysisPrompt(validExtraction)
+    expect(prompt).toContain('manufacturing_cost_per_unit * (total_rate / 100)')
+    expect(prompt).toContain('Shipping is not included in the duty base')
+  })
+})
+
 // ─── buildAnalysisPrompt — tariff variants ────────────────────────────────────
 
 describe('buildAnalysisPrompt — tariff variants', () => {
@@ -395,7 +471,7 @@ describe('buildAnalysisPrompt — tariff variants', () => {
     base_rate: 6,
     surcharge: 20,
     total_rate: 26,
-    source: 'hts_api',
+    source: 'category_map',
   }
 
   it('without tariff still includes "Estimate the HTS tariff rate" instruction', () => {
@@ -403,9 +479,9 @@ describe('buildAnalysisPrompt — tariff variants', () => {
     expect(prompt).toContain('Estimate the HTS tariff rate')
   })
 
-  it('with tariff includes "pre-fetched" and the exact rate/code, not the estimate instruction', () => {
+  it('with tariff includes "HTS schedule" and the exact rate/code, not the estimate instruction', () => {
     const prompt = buildAnalysisPrompt(validExtraction, tariff)
-    expect(prompt).toContain('pre-fetched')
+    expect(prompt).toContain('HTS schedule')
     expect(prompt).toContain('6912.00')
     expect(prompt).toContain('26%')
     expect(prompt).not.toContain('Estimate the HTS tariff rate')
@@ -430,7 +506,7 @@ describe('buildAnalysisPrompt — tariff variants', () => {
     }))
     await fetchAnalysis(validExtraction, tariff)
     const body = JSON.parse(capturedBody) as { prompt: string }
-    expect(body.prompt).toContain('pre-fetched')
+    expect(body.prompt).toContain('HTS schedule')
     expect(body.prompt).toContain('6912.00')
     vi.unstubAllGlobals()
   })
