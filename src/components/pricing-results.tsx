@@ -72,28 +72,28 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row">
             <dt>Manufacturing</dt>
-            <dd>{formatPrice(landed_cost_breakdown.manufacturing)}</dd>
+            <dd className="ledger-value">{formatPrice(landed_cost_breakdown.manufacturing)}</dd>
           </div>
           <div className="results-row">
             <dt>Shipping</dt>
-            <dd>{formatPrice(landed_cost_breakdown.shipping)}</dd>
+            <dd className="ledger-value">{formatPrice(landed_cost_breakdown.shipping)}</dd>
           </div>
           <div className="results-row results-row-tariff">
             <dt>
               Tariff
               <span className="results-tariff-rate">{landed_cost_breakdown.tariff_rate_assumed}</span>
             </dt>
-            <dd>{formatPrice(landed_cost_breakdown.tariff_cost)}</dd>
+            <dd className="ledger-value">{formatPrice(landed_cost_breakdown.tariff_cost)}</dd>
           </div>
           {landed_cost_breakdown.additional > 0 && (
             <div className="results-row">
               <dt>Additional</dt>
-              <dd>{formatPrice(landed_cost_breakdown.additional)}</dd>
+              <dd className="ledger-value">{formatPrice(landed_cost_breakdown.additional)}</dd>
             </div>
           )}
           <div className="results-row results-row-total">
             <dt>Total Landed Cost</dt>
-            <dd>{formatPrice(landed_cost_breakdown.total)}</dd>
+            <dd className="ledger-value">{formatPrice(landed_cost_breakdown.total)}</dd>
           </div>
         </dl>
       </div>
@@ -103,11 +103,11 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row results-row-msrp">
             <dt>Suggested Retail Price (MSRP)</dt>
-            <dd>{formatPrice(pricing.msrp)}</dd>
+            <dd className="ledger-value">{formatPrice(pricing.msrp)}</dd>
           </div>
           <div className="results-row">
             <dt>Suggested Wholesale Price</dt>
-            <dd>{formatPrice(pricing.wholesale_price)}</dd>
+            <dd className="ledger-value">{formatPrice(pricing.wholesale_price)}</dd>
           </div>
         </dl>
       </div>
@@ -117,11 +117,11 @@ export function PricingResults({ analysis }: Props) {
         <dl className="results-dl">
           <div className="results-row">
             <dt>Estimated Retail Margin</dt>
-            <dd>{formatMargin(pricing.retail_margin)}</dd>
+            <dd className="ledger-value">{formatMargin(pricing.retail_margin)}</dd>
           </div>
           <div className="results-row">
             <dt>Supplier Margin</dt>
-            <dd>{formatMargin(pricing.supplier_margin)}</dd>
+            <dd className="ledger-value">{formatMargin(pricing.supplier_margin)}</dd>
           </div>
         </dl>
       </div>

@@ -31,7 +31,6 @@ function App() {
   async function handleSubmit(message: string) {
     setLoadingPhase('extracting')
     setError(null)
-    setAnalysis(null)
 
     const hardTimeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Analysis timed out. Please try again.')), 90_000)
@@ -56,6 +55,7 @@ function App() {
       const result = await Promise.race([runPipeline(), hardTimeout])
       setAnalysis(result)
     } catch (err) {
+      setAnalysis(null)
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
       setLoadingPhase(null)

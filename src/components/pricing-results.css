@@ -6,10 +6,10 @@
 
 .results-heading {
   margin: 0 0 20px;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--color-text-secondary);
 }
 
@@ -22,11 +22,11 @@
 }
 
 .results-section-title {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--color-text-secondary);
   padding-bottom: 6px;
   border-bottom: 1px solid var(--color-border);
@@ -40,9 +40,9 @@
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 16px;
-  align-items: center;
-  padding: 7px 10px;
-  border-radius: 5px;
+  align-items: start;
+  padding: 6px 8px;
+  border-radius: 0;
 }
 
 .results-row:nth-child(even) {
@@ -52,6 +52,7 @@
 .results-row dt {
   font-size: 0.875rem;
   color: var(--color-text-secondary);
+  line-height: 1.4;
 }
 
 .results-row dd {
@@ -63,7 +64,13 @@
   white-space: nowrap;
 }
 
-/* Tariff row highlight */
+/* Ledger value — monospace, tabular numbers */
+.ledger-value {
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tariff sub-label — wraps gracefully as a footnote */
 .results-row-tariff dt {
   display: flex;
   flex-direction: column;
@@ -71,8 +78,13 @@
 }
 
 .results-tariff-rate {
-  font-size: 0.75rem;
+  display: block;
+  white-space: normal;
+  word-break: break-word;
+  font-size: 0.6875rem;
   font-weight: 400;
+  line-height: 1.4;
+  max-width: 320px;
   color: var(--color-text-secondary);
 }
 
@@ -88,18 +100,19 @@
   color: var(--color-text-primary);
 }
 
+/* MSRP row — amber accent treatment */
 .results-row-msrp {
-  background: var(--color-msrp-bg) !important;
-  border: 1px solid var(--color-msrp-border);
+  background: var(--color-accent-dim) !important;
+  border-left: 2px solid var(--color-accent);
 }
 
 .results-row-msrp dt {
-  color: #1e40af;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
 .results-row-msrp dd {
-  color: #1e40af;
+  color: var(--color-accent);
 }
 
 /* Confidence badge */
@@ -107,30 +120,31 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 5px 10px;
+  border-radius: 2px;
   margin-bottom: 10px;
   font-weight: 600;
+  font-size: 0.875rem;
 }
 
 .confidence-badge--strong {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
 }
 
 .confidence-badge--good {
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
 }
 
 .confidence-badge--risky {
-  background: #fef9c3;
-  color: #854d0e;
+  background: rgba(249, 115, 22, 0.12);
+  color: #fb923c;
 }
 
 .confidence-badge--weak {
-  background: #fee2e2;
-  color: #991b1b;
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
 }
 
 .confidence-score {
@@ -175,13 +189,18 @@
 }
 
 /* Assumptions */
+.results-assumptions {
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+}
+
 .assumptions-list {
   margin: 0;
   padding-left: 18px;
 }
 
 .assumptions-list li {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin-bottom: 4px;
   line-height: 1.4;

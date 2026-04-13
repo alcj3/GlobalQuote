@@ -107,4 +107,28 @@ describe('PricingResults', () => {
     render(<PricingResults analysis={emptyDecision} />)
     expect(screen.getByText('—')).toBeTruthy()
   })
+
+  it('applies ledger-value class to all landed cost breakdown values', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    const section = screen.getByText('Landed Cost Breakdown').closest('.results-section')
+    const dds = section!.querySelectorAll('dd')
+    expect(dds.length).toBeGreaterThan(0)
+    dds.forEach(dd => expect(dd.className).toContain('ledger-value'))
+  })
+
+  it('applies ledger-value class to suggested pricing values', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    const section = screen.getByText('Suggested Pricing').closest('.results-section')
+    const dds = section!.querySelectorAll('dd')
+    expect(dds.length).toBeGreaterThan(0)
+    dds.forEach(dd => expect(dd.className).toContain('ledger-value'))
+  })
+
+  it('applies ledger-value class to margin values', () => {
+    render(<PricingResults analysis={baseAnalysis} />)
+    const section = screen.getByText('Margins').closest('.results-section')
+    const dds = section!.querySelectorAll('dd')
+    expect(dds.length).toBeGreaterThan(0)
+    dds.forEach(dd => expect(dd.className).toContain('ledger-value'))
+  })
 })
