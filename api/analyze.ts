@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { lookupTariffRate } from './hts-client'
-import type { TariffResult } from './hts-client'
-import { getRetailerMargins } from './retailer-config'
+import { lookupTariffRate } from './hts-client.js'
+import type { TariffResult } from './hts-client.js'
+import { getRetailerMargins } from './retailer-config.js'
 
 interface ExtractedProduct {
   product: string
