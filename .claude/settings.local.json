@@ -4,7 +4,22 @@
       "Bash(npm install:*)",
       "Bash(npx vitest:*)",
       "Bash(npm run:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_wait_for",
+      "Bash(curl -s \"https://hts.usitc.gov/reststop/api/details/getrecord?htsno=6912.00\")",
+      "Bash(npx playwright:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(git stash:*)",
+      "Bash(curl -s http://localhost:5173)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_evaluate"
     ]
   }
 }

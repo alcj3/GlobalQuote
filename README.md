@@ -1,73 +1,50 @@
-# React + TypeScript + Vite
+# GlobalQuote
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Pricing intelligence for U.S. importers — enter product costs in plain English and get landed cost, MSRP, margins, and retailer-specific buyer analysis in seconds.
 
-Currently, two official plugins are available:
+## How it works
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+You describe your product in plain text: manufacturing cost, shipping, origin country, quantity, and target retailer. Groq's LLM extracts structured product data from that input, then a local HTS category map resolves the applicable tariff rate and any country-specific surcharges. A second Groq call uses those inputs to calculate landed cost, derive wholesale and MSRP from target margins, and generate buyer intelligence tailored to the specific retailer. Everything runs server-side in a Vercel serverless function — the API key never touches the browser.
 
-## React Compiler
+## Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React 19 + TypeScript + Vite
+- Groq (`llama-3.3-70b-versatile`) for extraction and pricing analysis
+- Vercel serverless functions (`api/analyze.ts`)
+- Vitest + Testing Library for unit and integration tests
 
-## Expanding the ESLint configuration
+## Local setup
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+git clone https://github.com/alcj3/GlobalQuote.git
+cd GlobalQuote
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Create `.env.local` in the project root:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+GROQ_API_KEY=your_key_here
+```
+
+Then start the dev server:
+
+```bash
+npm run dev
+```
+
+The app runs at `http://localhost:5173`. The `/api/analyze` endpoint is served by Vite's proxy in development.
+
+## Tests
+
+```bash
+npm run test
+```
+
+71 tests across 7 files covering extraction parsing, tariff lookup, pricing analysis, retailer margin logic, and the HTTP handler.
+
+## Known limitations
+
+- Tariff rates reflect the HTS schedule as of early 2025. Rates introduced or modified after April 2025 — including additional Section 301 tranches and reciprocal tariff actions — are not reflected.
+- Country surcharge coverage is limited to the major sourcing origins (China, Vietnam). Other countries fall back to the MFN base rate with no surcharge applied.
+- The HTS category map covers broad product categories, not 10-digit HTS subheadings. Rates are directionally accurate for estimation but should not be used for customs filings.
