@@ -271,7 +271,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'message is required' })
   }
 
-  const apiKey = process.env.VITE_GROQ_API_KEY
+  const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) {
     return res.status(500).json({ error: 'Pricing service unavailable. Please try again.' })
   }
