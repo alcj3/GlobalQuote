@@ -2,7 +2,51 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { lookupTariffRate } from './hts-client'
 import type { TariffResult } from './hts-client'
 import { getRetailerMargins } from './retailer-config'
-import type { ExtractedProduct, AIPricingAnalysis } from '../src/services/ollama-client'
+
+interface ExtractedProduct {
+  product: string
+  category: string
+  origin_country: string | null
+  manufacturing_cost_per_unit: number
+  shipping_cost_per_unit: number | null
+  quantity: number | null
+  target_retailer: string | null
+  additional_costs_per_unit: number | null
+  error: string | null
+}
+
+interface AIPricingAnalysis {
+  product: string
+  category: string
+  origin_country: string | null
+  quantity: number | null
+  target_retailer: string | null
+  landed_cost_breakdown: {
+    manufacturing: number
+    shipping: number
+    tariff_rate_assumed: string
+    tariff_cost: number
+    additional: number
+    total: number
+  }
+  pricing: {
+    msrp: number
+    wholesale_price: number
+    supplier_margin: number
+    retail_margin: number
+  }
+  confidence: {
+    score: number
+    label: 'Strong' | 'Good' | 'Risky' | 'Weak'
+    explanation: string
+  }
+  buyer_perspective: {
+    decision: string
+    insights: string[]
+    action: string
+  }
+  assumptions: string[]
+}
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
