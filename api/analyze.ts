@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { lookupTariffRate } from '../src/services/hts-client'
-import type { TariffResult } from '../src/services/hts-client'
-import { getRetailerMargins } from '../src/services/retailer-config'
+import { lookupTariffRate } from './hts-client'
+import type { TariffResult } from './hts-client'
+import { getRetailerMargins } from './retailer-config'
 import type { ExtractedProduct, AIPricingAnalysis } from '../src/services/ollama-client'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'

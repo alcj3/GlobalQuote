@@ -6,7 +6,7 @@ import {
   parseGroqAnalysis,
 } from './analyze'
 import type { ExtractedProduct } from '../src/services/ollama-client'
-import type { TariffResult } from '../src/services/hts-client'
+import type { TariffResult } from './hts-client'
 
 const baseMessage = 'I sell hoodies from Vietnam, manufacturing cost $6, shipping $2, 1000 units, Target'
 
